@@ -1,6 +1,9 @@
 //! This module defines functions for extracting components from XSD date/time values.
 
-use std::{str::FromStr, sync::RwLock};
+use std::{
+    str::FromStr,
+    sync::{LazyLock, RwLock},
+};
 
 use oxsdatatypes::{Date, DateTime, Time};
 
@@ -18,18 +21,20 @@ const XSD_DAY_TIME_DURATION: &str = "http://www.w3.org/2001/XMLSchema#dayTimeDur
 
 /// Timestamp returned by [FuncNow], captured via [set_now_timestamp].
 ///
-/// `None` until [set_now_timestamp] has been called for the first time.
-static NOW_TIMESTAMP: RwLock<Option<String>> = RwLock::new(None);
+/// Lazily initialized with the current time on first access
+static NOW_TIMESTAMP: LazyLock<RwLock<String>> =
+    LazyLock::new(|| RwLock::new(DateTime::now().to_string()));
 
 /// Capture the current time as the timestamp returned by `NOW()`.
 ///
-/// Call this once at the start of each program execution. All evaluations of `NOW()`
-/// during the execution will return this fixed value.
+/// This should be called once at the start of each program execution.
+/// All evaluations of `NOW()` during the execution will return this fixed value.
+///
+/// Note that the timestamp is global to the process.
 pub fn set_now_timestamp() {
     *NOW_TIMESTAMP
         .write()
-        .expect("no thread should panic while holding the lock") =
-        Some(DateTime::now().to_string());
+        .expect("no thread should panic while holding the lock") = DateTime::now().to_string();
 }
 
 /// Extract the year from an XSD dateTime or date value.
@@ -245,10 +250,7 @@ impl UnaryFunction for DateTimeTz {
 /// Corresponds to SPARQL `NOW()`.
 ///
 /// Returns the timestamp captured by [set_now_timestamp], so all evaluations
-/// during one program execution share the same value. This also makes the function
-/// deterministic, allowing it to be constant-folded.
-///
-/// Returns `None` if [set_now_timestamp] has never been called.
+/// during one program execution share the same value.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FuncNow;
 impl NullaryFunction for FuncNow {
@@ -256,7 +258,7 @@ impl NullaryFunction for FuncNow {
         let timestamp = NOW_TIMESTAMP
             .read()
             .expect("no thread should panic while holding the lock")
-            .clone()?;
+            .clone();
         Some(AnyDataValue::new_other(timestamp, XSD_DATETIME.to_string()))
     }
 
