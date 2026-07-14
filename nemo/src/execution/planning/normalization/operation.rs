@@ -1,31 +1,11 @@
 //! This module defines [Operation].
 
-use std::{fmt::Display, sync::RwLock};
+use std::fmt::Display;
 
 use nemo_physical::{
     datavalues::AnyDataValue, function::tree::FunctionTree,
     tabular::operations::OperationColumnMarker,
 };
-
-/// Query-start timestamp used by `NOW()`.
-///
-/// Set once per query execution via [`set_now_timestamp`].
-/// Read during plan construction in the `NOW` arm of [`Operation::function_tree`].
-static NOW_TIMESTAMP: RwLock<String> = RwLock::new(String::new());
-
-/// Set the query-start timestamp used by `NOW()`.
-///
-/// Call this once at the beginning of each query execution (before any rule planning).
-pub(crate) fn set_now_timestamp(now: String) {
-    *NOW_TIMESTAMP.write().expect("NOW_TIMESTAMP lock poisoned") = now;
-}
-
-fn get_now_timestamp() -> String {
-    NOW_TIMESTAMP
-        .read()
-        .expect("NOW_TIMESTAMP lock poisoned")
-        .clone()
-}
 
 use crate::{
     execution::planning::VariableTranslation,
@@ -390,13 +370,7 @@ impl Operation {
                     OperationKind::FuncRand => FunctionTree::func_rand(),
                     OperationKind::FuncUuid => FunctionTree::func_uuid(),
                     OperationKind::FuncStruuid => FunctionTree::func_struuid(),
-                    OperationKind::FuncNow => {
-                        let now = get_now_timestamp();
-                        FunctionTree::constant(AnyDataValue::new_other(
-                            now,
-                            "http://www.w3.org/2001/XMLSchema#dateTime".to_string(),
-                        ))
-                    }
+                    OperationKind::FuncNow => FunctionTree::func_now(),
                 }
             }
         }

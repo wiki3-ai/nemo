@@ -2,11 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use chrono::Utc;
-
 use nemo_physical::{
     datavalues::AnyDataValue,
     dictionary::DvDict,
+    function::definitions::set_now_timestamp,
     management::database::sources::{SimpleTable, TableSource},
     meta::timing::TimedCode,
 };
@@ -26,9 +25,7 @@ use crate::{
 };
 
 use super::{
-    execution_parameters::ExecutionParameters,
-    planning::normalization::operation::set_now_timestamp,
-    selection_strategy::strategy::RuleSelectionStrategy,
+    execution_parameters::ExecutionParameters, selection_strategy::strategy::RuleSelectionStrategy,
     tracing::rule_translation::RuleIdTranslation,
 };
 
@@ -131,6 +128,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program_handle: ProgramHandle,
         import_manager: ImportManager,
     ) -> Result<Self, Error> {
+        // Capture the current time for NOW()
+        set_now_timestamp();
+
         let normalized_program = NormalizedProgram::normalize_program(&program_handle);
         let rule_translation = RuleIdTranslation::new(&program_handle, &normalized_program);
 
@@ -297,9 +297,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Executes the program.
     pub async fn execute(&mut self) -> Result<(), Error> {
-        // Capture the current time for NOW() — consistent across the entire query execution.
-        set_now_timestamp(Utc::now().format("%Y-%m-%dT%H:%M:%S%.fZ").to_string());
-
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
