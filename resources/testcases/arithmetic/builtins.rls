@@ -128,6 +128,17 @@ result(bitxor, ?R) :- integers(?A, ?B, ?C), ?R = BITXOR(?A, ?B, ?C).
 result(replace_basic, ?R) :- strings(?A, _), ?R = REPLACE(?A, "l", "r").
 result(replace_capture, ?R) :- strings(?A, ?B), ?R = REPLACE(CONCAT(?A, " ", ?B), "(\w+) (\w+)", "$2 $1").
 result(replace_flags, ?R) :- strings(?A, _), ?R = REPLACE(?A, "hello", "Hi", "i").
+% The q flag treats pattern and replacement as literal strings
+result(replace_q, ?R) :- strings(?A, _), ?R = REPLACE("a.c", ".", "$1", "q").
+% Invalid flags must derive nothing
+result(replace_invalid_flags, ?R) :- strings(?A, _), ?R = REPLACE("abc", "([ab])(.*)", "$2", "i:.").
+result(regex_invalid_flags, ?R) :- strings(?A, _), ?R = REGEX(?A, "l+", "g").
+% The q flag treats the pattern as a literal string (combinable with i)
+result(regex_q_true, ?R) :- strings(?A, _), ?R = REGEX("a.c", "a.c", "q").
+result(regex_q_false, ?R) :- strings(?A, _), ?R = REGEX("abc", "a.c", "q").
+result(regex_qi, ?R) :- strings(?A, _), ?R = REGEX("A.C", "a.c", "qi").
+% Backreferences are supported
+result(regex_backref, ?R) :- strings(?A, _), ?R = REGEX("abcabc", "(abc)\1").
 
 % langMatches
 result(langmatches_exact, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "en").
@@ -167,6 +178,14 @@ result(dt_tz_utc, ?R) :- datetime_tz(?D), ?R = TZ(?D).
 result(dt_tz_offset, ?R) :- datetime_tz_offset(?D), ?R = TZ(?D).
 result(dt_timezone_utc, ?R) :- datetime_tz(?D), ?R = TIMEZONE(?D).
 result(dt_timezone_offset, ?R) :- datetime_tz_offset(?D), ?R = TIMEZONE(?D).
+
+% Nondeterministic functions and NOW
+% Value therefore cannot be checked for correctness
+result(rand_range, "ok") :- constant(?C), ?X = RAND(), ?X >= 0.0E0, ?X < 1.0E0.
+result(uuid_iri, ?R) :- constant(?C), ?R = isIri(UUID()).
+result(struuid_length, ?R) :- constant(?C), ?R = STRLEN(STRUUID()).
+result(now_datatype, ?R) :- constant(?C), ?R = DATATYPE(NOW()).
+result(now_year, "ok") :- constant(?C), ?Y = YEAR(NOW()), ?Y >= 2025.
 
 % Export
 @export result :- csv{}.
