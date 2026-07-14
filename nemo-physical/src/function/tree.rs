@@ -763,13 +763,12 @@ where
         }
     }
 
-    /// Create a tree node representing a check whether a string, or substring, matches
-    /// a pattern.
+    /// Create a tree node representing a regex-match check (REGEX).
     ///
+    /// Expects two or three `parameters`: the text to search in, the pattern,
+    /// and optionally a string of regex flags.
     /// This evaluates to `true` from the boolean value space
-    /// if the subtree `text` evaluates to a string that matches
-    /// the pattern resulting from evaluating the subtree `pattern`
-    /// and to `false` otherwise.
+    /// if the text matches the pattern and to `false` otherwise.
     pub fn string_regex(parameters: Vec<Self>) -> Self {
         Self::Nary {
             function: NaryFunctionEnum::StringRegex(StringRegex),
@@ -1256,8 +1255,11 @@ where
     }
 
     /// Return whether this tree evaluates to a constant value.
+    ///
+    /// Note that a tree without references is not constant
+    /// if it contains a nondeterministic function.
     pub fn is_constant(&self) -> bool {
-        self.references().is_empty()
+        self.references().is_empty() && !self.is_nondeterministic()
     }
 
     /// Return whether this tree contains a nondeterministic function.

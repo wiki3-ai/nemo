@@ -408,19 +408,21 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
             }
             ComputedMarker::Computed => {}
             ComputedMarker::Recomputed(program) => {
-                let dictionary = &mut self.dictionary.borrow_mut();
-                let program_result = program
-                    .evaluate_data(&self.input_values)
-                    .map(|result| result.to_storage_value_t_dict(dictionary));
+                if Some(next_type) == self.possible_types[next_layer].first_type() {
+                    let dictionary = &mut self.dictionary.borrow_mut();
+                    let program_result = program
+                        .evaluate_data(&self.input_values)
+                        .map(|result| result.to_storage_value_t_dict(dictionary));
 
-                self.column_scans[next_layer]
-                    .get_mut()
-                    .constant_set_none_all();
-
-                if let Some(storage_value) = program_result {
                     self.column_scans[next_layer]
                         .get_mut()
-                        .constant_set(storage_value);
+                        .constant_set_none_all();
+
+                    if let Some(storage_value) = program_result {
+                        self.column_scans[next_layer]
+                            .get_mut()
+                            .constant_set(storage_value);
+                    }
                 }
             }
         }
@@ -770,6 +772,58 @@ mod test {
         samples.sort_by(f64::total_cmp);
         samples.dedup();
         assert_eq!(samples.len(), 4, "each row must get a fresh RAND() sample");
+    }
+
+    #[test]
+    fn function_nondeterministic_evaluated_once_per_row() {
+        let dictionary = RefCell::new(Dict::default());
+
+        let trie = trie_int64(vec![&[1], &[2], &[3]]);
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("r");
+
+        let markers = marker_generator.operation_table(["x", "r"].iter());
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(
+            *marker_generator.get(&"r").unwrap(),
+            FunctionTree::func_struuid(),
+        );
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let function_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        let result = RowScan::new_full(function_scan)
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(result.len(), 3);
+
+        let mut uuids = result
+            .iter()
+            .map(|row| row[1].to_plain_string_unchecked())
+            .collect::<Vec<_>>();
+        uuids.sort();
+        uuids.dedup();
+        assert_eq!(uuids.len(), 3, "each row must get a fresh STRUUID()");
+
+        // The program must be evaluated exactly once per row:
+        // re-entering the layer for the same row (e.g. to probe another storage type)
+        // must not generate (and intern) another UUID.
+        assert_eq!(
+            dictionary.borrow().len(),
+            3,
+            "each row must add exactly one dictionary entry"
+        );
     }
 
     #[test]
