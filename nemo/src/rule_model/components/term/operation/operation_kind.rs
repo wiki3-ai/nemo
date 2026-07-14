@@ -70,6 +70,11 @@ impl Display for OperationNumArguments {
 }
 
 /// Supported operations
+///
+/// Note that operation names are matched in the order of the variants below,
+/// so no name may be a case-insensitive prefix of the name of a later variant
+/// (e.g. LanguageTag ("LANG") must come after StringLangMatches ("LANGMATCHES")).
+/// This is enforced by a unit test.
 #[derive(Assoc, EnumIter, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
 #[func(pub fn name(&self) -> &'static str)]
 #[func(pub fn num_arguments(&self) -> OperationNumArguments)]
@@ -261,7 +266,6 @@ pub enum OperationKind {
     #[assoc(return_type = ValueType::LanguageString)]
     LanguageString,
     /// Check if a language tag matches a language range, corresponding to SPARQL function langMatches.
-    /// Must appear before LanguageTag ("LANG") since "langMatches" starts with "lang" (case-insensitive).
     #[assoc(name = function::LANGMATCHES)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(return_type = ValueType::Boolean)]
@@ -402,7 +406,6 @@ pub enum OperationKind {
     #[assoc(return_type = ValueType::Boolean)]
     BooleanDisjunction,
     /// Extract the minutes from an XSD dateTime/time value, corresponding to SPARQL MINUTES.
-    /// Must appear before NumericMinimum ("MIN") since "min" is a prefix of "minutes".
     #[assoc(name = function::MINUTES)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::Number)]
@@ -428,13 +431,11 @@ pub enum OperationKind {
     #[assoc(return_type = ValueType::String)]
     StringConcatenation,
     /// Construct a typed literal from a lexical value and a datatype IRI, corresponding to SPARQL function STRDT.
-    /// Must appear before LexicalValue ("STR") since "STRDT" starts with "STR" (case-insensitive).
     #[assoc(name = function::STRDT)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(return_type = ValueType::Any)]
     TypedLiteral,
     /// Return a fresh UUID as a plain string, corresponding to SPARQL STRUUID.
-    /// Must appear before LexicalValue ("STR") since "STRUUID" starts with "STR" (case-insensitive).
     #[assoc(name = function::STRUUID)]
     #[assoc(num_arguments = OperationNumArguments::Nullary)]
     #[assoc(return_type = ValueType::String)]
@@ -500,7 +501,6 @@ pub enum OperationKind {
     #[assoc(return_type = ValueType::Number)]
     DateTimeSeconds,
     /// Extract the timezone as xsd:dayTimeDuration, corresponding to SPARQL TIMEZONE.
-    /// Must appear before DateTimeTz ("TZ") since "tz" is a prefix of "timezone".
     #[assoc(name = function::TIMEZONE)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::Any)]
@@ -574,7 +574,7 @@ mod test {
                 names[(name_index + 1)..]
                     .iter()
                     .all(|remaining| !remaining.starts_with(name.as_str())),
-                "Operation name {:?} is a case-insensitive prefix of a later operation name",
+                "Operation name {:?} should not be a case-insensitive prefix of a later operation name",
                 name,
             )
         }

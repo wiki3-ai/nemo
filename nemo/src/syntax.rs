@@ -345,7 +345,7 @@ pub mod builtin {
         /// Replace occurrences of a regex pattern in a string
         pub(crate) const REPLACE: &str = "REPLACE";
         /// Check if a language tag matches a language range
-        pub(crate) const LANGMATCHES: &str = "langMatches";
+        pub(crate) const LANGMATCHES: &str = "LANGMATCHES";
         /// Compute the MD5 hash of a string
         pub(crate) const MD5: &str = "MD5";
         /// Compute the SHA1 hash of a string
