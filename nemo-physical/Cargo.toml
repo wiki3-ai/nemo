@@ -12,7 +12,7 @@ repository.workspace = true
 [features]
 check_column_sorting = []
 old_dictionaries = []
-js = ["uuid/js"]
+js = ["uuid/js", "oxsdatatypes/js"]
 
 [[bin]]
 name = "dict-bench"
