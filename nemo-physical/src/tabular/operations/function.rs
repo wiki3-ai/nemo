@@ -35,9 +35,11 @@ enum ComputedMarker {
     Copy(usize),
     /// Layer computes new value from input layers
     Computed,
-    /// Layer computes new value by evaluating a zero-argument program (e.g. RAND, UUID).
-    /// The program is re-evaluated on every call to `down` for this layer.
-    ZeroArgProgram(StackProgram),
+    /// Layer computes new value by re-evaluating a program on every call to `down`,
+    /// instead of computing it once per change of its referenced input layers.
+    /// This is required for functions containing nondeterministic subterms (e.g. RAND or UUID),
+    /// which must produce a fresh value for every row.
+    Recomputed(StackProgram),
 }
 
 /// Marks an output column as either being unused
@@ -138,20 +140,23 @@ impl GeneratorFunction {
                         input_information[layer_reference].set_used();
                     }
 
-                    if let Some(layer_last_reference) = layer_last_reference {
-                        let stack_program =
-                            StackProgram::from_function_tree(function, &reference_map, None);
+                    let stack_program =
+                        StackProgram::from_function_tree(function, &reference_map, None);
 
-                        input_information[layer_last_reference]
-                            .append_used((stack_program, layer_output));
-                    } else {
-                        // No column references — zero-arg nondeterministic function
-                        // (e.g. RAND, UUID). Store the program in the output layer itself;
-                        // it will be evaluated with no inputs on every call to `down`.
-                        let stack_program =
-                            StackProgram::from_function_tree(function, &reference_map, None);
-                        computed_information[layer_output] =
-                            ComputedMarker::ZeroArgProgram(stack_program);
+                    match layer_last_reference {
+                        Some(layer) if !function.is_nondeterministic() => {
+                            // Deterministic functions only need to be re-evaluated
+                            // when one of their inputs changes,
+                            // so the program is attached to its last referenced layer.
+                            input_information[layer].append_used((stack_program, layer_output));
+                        }
+                        _ => {
+                            // Nondeterministic functions (and functions without references,
+                            // whose evaluation no input layer could trigger)
+                            // must be re-evaluated for every row.
+                            computed_information[layer_output] =
+                                ComputedMarker::Recomputed(stack_program);
+                        }
                     }
                 }
                 SpecialCaseFunction::Constant(constant) => {
@@ -222,7 +227,7 @@ impl OperationGenerator for GeneratorFunction {
                     match information.computed {
                         ComputedMarker::Computed
                         | ComputedMarker::Copy(_)
-                        | ComputedMarker::ZeroArgProgram(_) => {
+                        | ComputedMarker::Recomputed(_) => {
                             ColumnScanEnum::Constant(ColumnScanConstant::new(None))
                         }
                         ComputedMarker::Input => {
@@ -249,13 +254,18 @@ impl OperationGenerator for GeneratorFunction {
             );
             column_scans.push(UnsafeCell::new(new_scan));
 
-            if let ComputedMarker::Input = information.computed {
-                possible_types[output_index] = trie_scan.possible_types(input_index);
-                input_index += 1;
-            } else if let ComputedMarker::Copy(source) = information.computed {
-                possible_types[output_index] = possible_types[source];
-            } else if let ComputedMarker::ZeroArgProgram(program) = &information.computed {
-                possible_types[output_index] = program.type_propagation(&[], None);
+            match &information.computed {
+                ComputedMarker::Input => {
+                    possible_types[output_index] = trie_scan.possible_types(input_index);
+                    input_index += 1;
+                }
+                ComputedMarker::Copy(source) => {
+                    possible_types[output_index] = possible_types[*source];
+                }
+                ComputedMarker::Recomputed(program) => {
+                    possible_types[output_index] = program.type_propagation(&used_types, None);
+                }
+                ComputedMarker::Computed => {}
             }
 
             if let InputMarker::Used(programs) = &information.input {
@@ -397,10 +407,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
                 }
             }
             ComputedMarker::Computed => {}
-            ComputedMarker::ZeroArgProgram(program) => {
+            ComputedMarker::Recomputed(program) => {
                 let dictionary = &mut self.dictionary.borrow_mut();
                 let program_result = program
-                    .evaluate_data(&[])
+                    .evaluate_data(&self.input_values)
                     .map(|result| result.to_storage_value_t_dict(dictionary));
 
                 self.column_scans[next_layer]
@@ -442,7 +452,7 @@ mod test {
 
     use crate::{
         datatypes::{StorageTypeName, StorageValueT, into_datavalue::IntoDataValue},
-        datavalues::AnyDataValue,
+        datavalues::{AnyDataValue, DataValue},
         dictionary::DvDict,
         function::tree::FunctionTree,
         management::database::Dict,
@@ -704,6 +714,62 @@ mod test {
                 StorageValueT::Int64(12), // r = 12
             ],
         );
+    }
+
+    #[test]
+    fn function_nondeterministic_recompute() {
+        let dictionary = RefCell::new(Dict::default());
+
+        let trie = trie_int64(vec![&[1, 3], &[1, 4], &[1, 5], &[2, 3]]);
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("r");
+
+        let markers = marker_generator.operation_table(["x", "y", "r"].iter());
+        let marker_x = *marker_generator.get(&"x").unwrap();
+
+        // r = DOUBLE(x) + RAND() references only x,
+        // but being nondeterministic, it must be re-evaluated for every row,
+        // in particular also when only y changes
+        let function = FunctionTree::numeric_addition(
+            FunctionTree::casting_to_double(FunctionTree::reference(marker_x)),
+            FunctionTree::func_rand(),
+        );
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(*marker_generator.get(&"r").unwrap(), function);
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let function_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        let result = RowScan::new_full(function_scan)
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(result.len(), 4);
+
+        for row in &result {
+            let x = row[0].to_i64_unchecked() as f64;
+            let r = row[2].to_f64_unchecked();
+            assert!((x..x + 1.0).contains(&r));
+        }
+
+        let mut samples = result
+            .iter()
+            .map(|row| row[2].to_f64_unchecked())
+            .collect::<Vec<_>>();
+        samples.sort_by(f64::total_cmp);
+        samples.dedup();
+        assert_eq!(samples.len(), 4, "each row must get a fresh RAND() sample");
     }
 
     #[test]
