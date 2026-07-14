@@ -1,28 +1,37 @@
 //! This module defines functions for extracting components from XSD date/time values.
 
-use std::str::FromStr;
+use std::{str::FromStr, sync::RwLock};
 
-use oxsdatatypes::{Date, DateTime, Double, Time};
+use oxsdatatypes::{Date, DateTime, Time};
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{AnyDataValue, DataValue, ValueDomain},
+    datavalues::{AnyDataValue, DataValue},
 };
 
-use super::{FunctionTypePropagation, UnaryFunction};
+use super::{FunctionTypePropagation, NullaryFunction, UnaryFunction};
 
 const XSD_DATETIME: &str = "http://www.w3.org/2001/XMLSchema#dateTime";
 const XSD_DATE: &str = "http://www.w3.org/2001/XMLSchema#date";
 const XSD_TIME: &str = "http://www.w3.org/2001/XMLSchema#time";
 const XSD_DAY_TIME_DURATION: &str = "http://www.w3.org/2001/XMLSchema#dayTimeDuration";
 
-/// Retrieve a `ValueDomain::Other` value's lexical value and datatype IRI.
-fn other_parts(value: AnyDataValue) -> Option<(String, String)> {
-    if value.value_domain() != ValueDomain::Other {
-        return None;
-    }
-    Some((value.lexical_value(), value.datatype_iri()))
+/// Timestamp returned by [FuncNow], captured via [set_now_timestamp].
+///
+/// `None` until [set_now_timestamp] has been called for the first time.
+static NOW_TIMESTAMP: RwLock<Option<String>> = RwLock::new(None);
+
+/// Capture the current time as the timestamp returned by `NOW()`.
+///
+/// Call this once at the start of each program execution. All evaluations of `NOW()`
+/// during the execution will return this fixed value.
+pub fn set_now_timestamp() {
+    *NOW_TIMESTAMP
+        .write()
+        .expect("no thread should panic while holding the lock") =
+        Some(DateTime::now().to_string());
 }
+
 /// Extract the year from an XSD dateTime or date value.
 ///
 /// Corresponds to SPARQL `YEAR(arg)`. Returns an integer.
@@ -30,7 +39,7 @@ fn other_parts(value: AnyDataValue) -> Option<(String, String)> {
 pub struct DateTimeYear;
 impl UnaryFunction for DateTimeYear {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let (lexical, datatype) = other_parts(parameter)?;
+        let (lexical, datatype) = parameter.to_other()?;
         let year = if datatype == XSD_DATETIME {
             DateTime::from_str(&lexical).ok()?.year()
         } else if datatype == XSD_DATE {
@@ -53,7 +62,7 @@ impl UnaryFunction for DateTimeYear {
 pub struct DateTimeMonth;
 impl UnaryFunction for DateTimeMonth {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let (lexical, datatype) = other_parts(parameter)?;
+        let (lexical, datatype) = parameter.to_other()?;
         let month = if datatype == XSD_DATETIME {
             DateTime::from_str(&lexical).ok()?.month()
         } else if datatype == XSD_DATE {
@@ -76,7 +85,7 @@ impl UnaryFunction for DateTimeMonth {
 pub struct DateTimeDay;
 impl UnaryFunction for DateTimeDay {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let (lexical, datatype) = other_parts(parameter)?;
+        let (lexical, datatype) = parameter.to_other()?;
         let day = if datatype == XSD_DATETIME {
             DateTime::from_str(&lexical).ok()?.day()
         } else if datatype == XSD_DATE {
@@ -98,7 +107,7 @@ impl UnaryFunction for DateTimeDay {
 pub struct DateTimeHours;
 impl UnaryFunction for DateTimeHours {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let (lexical, datatype) = other_parts(parameter)?;
+        let (lexical, datatype) = parameter.to_other()?;
         let hour = if datatype == XSD_DATETIME {
             DateTime::from_str(&lexical).ok()?.hour()
         } else if datatype == XSD_TIME {
@@ -121,7 +130,7 @@ impl UnaryFunction for DateTimeHours {
 pub struct DateTimeMinutes;
 impl UnaryFunction for DateTimeMinutes {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let (lexical, datatype) = other_parts(parameter)?;
+        let (lexical, datatype) = parameter.to_other()?;
         let minute = if datatype == XSD_DATETIME {
             DateTime::from_str(&lexical).ok()?.minute()
         } else if datatype == XSD_TIME {
@@ -139,12 +148,13 @@ impl UnaryFunction for DateTimeMinutes {
 
 /// Extract the seconds from an XSD dateTime or time value.
 ///
-/// Corresponds to SPARQL `SECONDS(arg)`. Returns a double.
+/// Corresponds to SPARQL `SECONDS(arg)`. Returns an `xsd:decimal`,
+/// which is an integer if the fractional digits are omitted or zero.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct DateTimeSeconds;
 impl UnaryFunction for DateTimeSeconds {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let (lexical, datatype) = other_parts(parameter)?;
+        let (lexical, datatype) = parameter.to_other()?;
         let second = if datatype == XSD_DATETIME {
             DateTime::from_str(&lexical).ok()?.second()
         } else if datatype == XSD_TIME {
@@ -152,11 +162,16 @@ impl UnaryFunction for DateTimeSeconds {
         } else {
             return None;
         };
-        AnyDataValue::new_double_from_f64(f64::from(Double::from(second))).ok()
+        AnyDataValue::new_from_decimal_literal(second.to_string()).ok()
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Double.bitset())
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Int64
+                .bitset()
+                .union(StorageTypeName::Id32.bitset())
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
 
@@ -168,7 +183,8 @@ impl UnaryFunction for DateTimeSeconds {
 pub struct DateTimeTimezone;
 impl UnaryFunction for DateTimeTimezone {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let (lexical, datatype) = other_parts(parameter)?;
+        let (lexical, datatype) = parameter.to_other()?;
+
         let timezone = if datatype == XSD_DATETIME {
             DateTime::from_str(&lexical).ok()?.timezone()
         } else if datatype == XSD_DATE {
@@ -201,7 +217,7 @@ impl UnaryFunction for DateTimeTimezone {
 pub struct DateTimeTz;
 impl UnaryFunction for DateTimeTz {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let (lexical, datatype) = other_parts(parameter)?;
+        let (lexical, datatype) = parameter.to_other()?;
         let timezone_offset = if datatype == XSD_DATETIME {
             DateTime::from_str(&lexical).ok()?.timezone_offset()
         } else if datatype == XSD_DATE {
@@ -213,6 +229,35 @@ impl UnaryFunction for DateTimeTz {
         };
         let tz_str = timezone_offset.map(|tz| tz.to_string()).unwrap_or_default();
         Some(AnyDataValue::new_plain_string(tz_str))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Return the current date and time as an `xsd:dateTime` typed literal.
+///
+/// Corresponds to SPARQL `NOW()`.
+///
+/// Returns the timestamp captured by [set_now_timestamp], so all evaluations
+/// during one program execution share the same value. This also makes the function
+/// deterministic, allowing it to be constant-folded.
+///
+/// Returns `None` if [set_now_timestamp] has never been called.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct FuncNow;
+impl NullaryFunction for FuncNow {
+    fn evaluate(&self) -> Option<AnyDataValue> {
+        let timestamp = NOW_TIMESTAMP
+            .read()
+            .expect("no thread should panic while holding the lock")
+            .clone()?;
+        Some(AnyDataValue::new_other(timestamp, XSD_DATETIME.to_string()))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {

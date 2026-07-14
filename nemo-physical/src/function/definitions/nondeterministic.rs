@@ -1,9 +1,4 @@
 //! This module defines nondeterministic (side-effecting) built-in functions.
-//!
-//! These functions must never be constant-folded — they produce a fresh value
-//! on every invocation. [`FunctionTree::is_nondeterministic`] returns `true`
-//! for any tree that contains one of these functions, which prevents
-//! `special_function()` from collapsing the tree to a `Constant`.
 
 use rand::random;
 use uuid::Uuid;
@@ -28,17 +23,22 @@ impl NullaryFunction for FuncRand {
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(StorageTypeName::Double.bitset())
     }
+
+    fn is_nondeterministic(&self) -> bool {
+        true
+    }
 }
 
 /// Return a fresh UUID as an IRI.
 ///
-/// Corresponds to SPARQL `UUID()`.
-/// Returns a value of the form `<urn:uuid:…>`.
+/// Corresponds to SPARQL `UUID()`, which leaves the UUID version implementation-defined.
+/// Returns a value of the form `<urn:uuid:…>` containing a version 7 UUID,
+/// which is lexicographically greater than all UUIDs generated before it.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FuncUuid;
 impl NullaryFunction for FuncUuid {
     fn evaluate(&self) -> Option<AnyDataValue> {
-        let iri = format!("urn:uuid:{}", Uuid::new_v4());
+        let iri = format!("urn:uuid:{}", Uuid::now_v7());
         Some(AnyDataValue::new_iri(iri))
     }
 
@@ -49,17 +49,22 @@ impl NullaryFunction for FuncUuid {
                 .union(StorageTypeName::Id64.bitset()),
         )
     }
+
+    fn is_nondeterministic(&self) -> bool {
+        true
+    }
 }
 
 /// Return a fresh UUID as a plain string (without angle brackets).
 ///
-/// Corresponds to SPARQL `STRUUID()`.
-/// Returns a lowercase hyphenated UUID string, e.g. `"f81d4fae-7dec-11d0-a765-00a0c91e6bf6"`.
+/// Corresponds to SPARQL `STRUUID()`, which leaves the UUID version implementation-defined.
+/// Returns a lowercase hyphenated version 7 UUID string,
+/// which is lexicographically greater than all UUIDs generated before it.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FuncStruuid;
 impl NullaryFunction for FuncStruuid {
     fn evaluate(&self) -> Option<AnyDataValue> {
-        Some(AnyDataValue::new_plain_string(Uuid::new_v4().to_string()))
+        Some(AnyDataValue::new_plain_string(Uuid::now_v7().to_string()))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -68,5 +73,9 @@ impl NullaryFunction for FuncStruuid {
                 .bitset()
                 .union(StorageTypeName::Id64.bitset()),
         )
+    }
+
+    fn is_nondeterministic(&self) -> bool {
+        true
     }
 }

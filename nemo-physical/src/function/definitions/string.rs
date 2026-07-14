@@ -1,8 +1,9 @@
 //! This module defines functions on string.
 
+use fancy_regex::{NoExpand, Regex, RegexBuilder, escape};
 use levenshtein::levenshtein;
 use once_cell::sync::OnceCell;
-use std::{cmp::Ordering, num::NonZero, sync::Mutex};
+use std::{borrow::Cow, cmp::Ordering, num::NonZero, sync::Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
@@ -141,8 +142,7 @@ impl BinaryFunction for StringCompare {
 
 /// Concatenation of strings
 ///
-/// Returns a string, that results from merging together
-/// all input strings.
+/// Returns a string that results from merging together all input strings.
 ///
 /// Returns a language tagged string if all parameters have an identical language tag.
 /// Otherwise, return a plain string.
@@ -441,7 +441,65 @@ impl BinaryFunction for StringSubstring {
 }
 
 const REGEX_CACHE_SIZE: NonZero<usize> = NonZero::new(32).unwrap();
-static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceCell::new();
+static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<(String, String), Regex>>> = OnceCell::new();
+
+/// Compile the regular expression `pattern` under the given `flags`,
+/// consulting a cache of previous compilations first.
+///
+/// The available flags are defined by the
+/// [XPath specification](https://www.w3.org/TR/xpath-functions/#flags):
+/// `s` (dot matches newline), `m` (multi-line), `i` (case-insensitive),
+/// `x` (ignore whitespace), and `q` (interpret the pattern as a literal string).
+/// Per the specification, `q` disables `m`, `s`, and `x`,
+/// but may be combined with `i`.
+///
+/// Returns `None` if `flags` contains any other character
+/// or if `pattern` is not a valid regular expression.
+fn compile_regex(pattern: &str, flags: &str) -> Option<Regex> {
+    let mut case_insensitive = false;
+    let mut multi_line = false;
+    let mut dot_matches_new_line = false;
+    let mut ignore_whitespace = false;
+    let mut literal = false;
+
+    for flag in flags.chars() {
+        match flag {
+            'i' => case_insensitive = true,
+            'm' => multi_line = true,
+            's' => dot_matches_new_line = true,
+            'x' => ignore_whitespace = true,
+            'q' => literal = true,
+            _ => return None,
+        }
+    }
+
+    let mut cache = REGEX_CACHE
+        .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
+        .lock()
+        .expect("no thread should panic while holding the lock");
+
+    cache
+        .try_get_or_insert((pattern.to_string(), flags.to_string()), || {
+            let pattern = if literal {
+                escape(pattern)
+            } else {
+                Cow::Borrowed(pattern)
+            };
+
+            let mut builder = RegexBuilder::new(&pattern);
+            builder.case_insensitive(case_insensitive);
+            if !literal {
+                builder
+                    .multi_line(multi_line)
+                    .dot_matches_new_line(dot_matches_new_line)
+                    .ignore_whitespace(ignore_whitespace);
+            }
+
+            builder.build()
+        })
+        .ok()
+        .cloned()
+}
 
 /// Regex string matching
 ///
@@ -449,9 +507,11 @@ static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceC
 /// is matched in the string provided as the first parameter and `false` otherwise.
 /// An optional third parameter may provide regex flags (e.g. `"i"` for case-insensitive),
 /// corresponding to the SPARQL `regex(string, pattern [, flags])` function.
+/// The available flags are documented at [compile_regex].
 ///
-/// Returns `None` if any parameter is not a (language tagged) string or if the second parameter is not
-/// a valid regular expression.
+/// Returns `None` if the first parameter is not a (language tagged) string,
+/// if the pattern or the flags are not plain strings,
+/// if the flags are invalid, or if the pattern is not a valid regular expression.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringRegex;
 impl NaryFunction for StringRegex {
@@ -460,27 +520,17 @@ impl NaryFunction for StringRegex {
             return None;
         }
 
-        let lang_string = LangTaggedString::try_from(parameters[0].clone()).ok()?;
-        let lang_pattern = LangTaggedString::try_from(parameters[1].clone()).ok()?;
-
-        let regex_str = if parameters.len() == 3 {
-            let flags = LangTaggedString::try_from(parameters[2].clone()).ok()?;
-            format!("(?{}){}", flags.string, lang_pattern.string)
-        } else {
-            lang_pattern.string.clone()
+        let text = LangTaggedString::try_from(parameters[0].clone()).ok()?;
+        let pattern = parameters[1].to_plain_string()?;
+        let flags = match parameters.get(2) {
+            Some(parameter) => parameter.to_plain_string()?,
+            None => String::default(),
         };
 
-        let mut cache = REGEX_CACHE
-            .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
-            .lock()
-            .unwrap();
+        let regex = compile_regex(&pattern, &flags)?;
+        let is_match = regex.is_match(&text.string).ok()?;
 
-        let regex = cache.try_get_or_insert(regex_str.clone(), || regex::Regex::new(&regex_str));
-
-        Some(match regex {
-            Ok(regex) => AnyDataValue::new_boolean(regex.is_match(&lang_string.string)),
-            Err(_) => AnyDataValue::new_boolean(false),
-        })
+        Some(AnyDataValue::new_boolean(is_match))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -498,8 +548,6 @@ impl NaryFunction for StringRegex {
 /// insertions, deletions, or character substitutions required to
 /// change one argument into the other) between the two given strings
 /// as a number from the integer value space.
-///
-/// Returns a plain string.
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or
 /// if the two language tags do not comply with Argument Compatibility Rules.
@@ -524,8 +572,6 @@ impl BinaryFunction for StringLevenshtein {
 /// Length of a string
 ///
 /// Returns the length of the given string as a number from the integer value space.
-///
-/// Returns a plain string.
 ///
 /// Returns `None` if the provided argument is not a (language tagged) string
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -741,9 +787,9 @@ impl UnaryFunction for StringUriEncode {
     }
 }
 
-/// URI encoding (percent encoding) of a string
+/// URI decoding (percent decoding) of a string
 ///
-/// Returns the percent-encoded version of the provided string.
+/// Returns the percent-decoded version of the provided string.
 ///
 /// Returns a plain string.
 ///
@@ -826,11 +872,14 @@ impl TernaryFunction for StringSubstringLength {
 ///
 /// Corresponds to SPARQL REPLACE(arg, pattern, replacement [, flags]).
 /// Returns a copy of `arg` with every match of the regex `pattern` replaced by `replacement`.
-/// The optional `flags` parameter (4th element) sets regex flags (e.g. "i", "s", "m", "x").
+/// The optional `flags` parameter (4th element) sets regex flags,
+/// which are documented at [compile_regex].
 /// Replacement may reference capture groups via `$1`, `$2`, etc.; use `$$` for a literal `$`.
+/// Under the `q` flag, the replacement is used literally.
 ///
-/// Returns `None` if any string argument is not a (language tagged) string,
-/// or if the pattern (with any flags) is not a valid regex.
+/// Returns `None` if the first parameter is not a (language tagged) string,
+/// if the pattern, replacement, or flags are not plain strings,
+/// if the flags are invalid, or if the pattern is not a valid regex.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringReplace;
 impl NaryFunction for StringReplace {
@@ -840,32 +889,23 @@ impl NaryFunction for StringReplace {
         }
 
         let input = LangTaggedString::try_from(parameters[0].clone()).ok()?;
-        let pattern = LangTaggedString::try_from(parameters[1].clone()).ok()?;
-        let replacement = LangTaggedString::try_from(parameters[2].clone()).ok()?;
-
-        let regex_str = if parameters.len() == 4 {
-            let flags = LangTaggedString::try_from(parameters[3].clone()).ok()?;
-            format!("(?{}){}", flags.string, pattern.string)
-        } else {
-            pattern.string.clone()
+        let pattern = parameters[1].to_plain_string()?;
+        let replacement = parameters[2].to_plain_string()?;
+        let flags = match parameters.get(3) {
+            Some(parameter) => parameter.to_plain_string()?,
+            None => String::default(),
         };
 
-        let mut cache = REGEX_CACHE
-            .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
-            .lock()
-            .unwrap();
-
-        let regex = cache.try_get_or_insert(regex_str.clone(), || regex::Regex::new(&regex_str));
-
-        match regex {
-            Ok(regex) => {
-                let result = regex
-                    .replace_all(&input.string, replacement.string.as_str())
-                    .into_owned();
-                Some(LangTaggedString::new(result, input.tag).into_data_value())
-            }
-            Err(_) => None,
+        let regex = compile_regex(&pattern, &flags)?;
+        let result = if flags.contains('q') {
+            regex.try_replacen(&input.string, 0, NoExpand(&replacement))
+        } else {
+            regex.try_replacen(&input.string, 0, replacement.as_str())
         }
+        .ok()?
+        .into_owned();
+
+        Some(LangTaggedString::new(result, input.tag).into_data_value())
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -884,7 +924,7 @@ impl NaryFunction for StringReplace {
 /// - A range of `"*"` matches any non-empty language tag.
 /// - Otherwise the tag matches if it equals the range or starts with `"<range>-"` (case-insensitive).
 ///
-/// Returns `None` if either argument is not a (plain or language-tagged) string.
+/// Returns `None` if either argument is not a plain string.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringLangMatches;
 impl BinaryFunction for StringLangMatches {
@@ -893,11 +933,11 @@ impl BinaryFunction for StringLangMatches {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        let tag = LangTaggedString::try_from(parameter_first).ok()?;
-        let range = LangTaggedString::try_from(parameter_second).ok()?;
+        let tag = parameter_first.to_plain_string()?;
+        let range = parameter_second.to_plain_string()?;
 
-        let tag_lc = tag.string.to_lowercase();
-        let range_lc = range.string.to_lowercase();
+        let tag_lc = tag.to_lowercase();
+        let range_lc = range.to_lowercase();
 
         let matches = if range_lc == "*" {
             !tag_lc.is_empty()
@@ -929,9 +969,9 @@ mod test {
 
     use super::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLength, StringLevenshtein, StringLowercase, StringRegex, StringReverse, StringStarts,
-        StringSubstring, StringSubstringLength, StringTrim, StringTrimEnd, StringTrimStart,
-        StringUppercase, StringUriDecode, StringUriEncode,
+        StringLength, StringLevenshtein, StringLowercase, StringRegex, StringReplace,
+        StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringTrim,
+        StringTrimEnd, StringTrimStart, StringUppercase, StringUriDecode, StringUriEncode,
     };
 
     #[test]
@@ -1600,6 +1640,142 @@ mod test {
         let actual_result_flags = StringRegex.evaluate(&[string_flags, pattern_flags, flags]);
         assert!(actual_result_flags.is_some());
         assert_eq!(result_flags, actual_result_flags.unwrap());
+
+        // The q flag treats the pattern as a literal string
+        let q_flag = AnyDataValue::new_plain_string("q".to_string());
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                q_flag.clone(),
+            ]),
+            Some(AnyDataValue::new_boolean(true))
+        );
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                q_flag.clone(),
+            ]),
+            Some(AnyDataValue::new_boolean(false))
+        );
+
+        // The q flag may be combined with i
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("A.C".to_string()),
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                AnyDataValue::new_plain_string("qi".to_string()),
+            ]),
+            Some(AnyDataValue::new_boolean(true))
+        );
+
+        // Invalid flags are rejected
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("g".to_string()),
+            ]),
+            None
+        );
+
+        // Backreferences are supported
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abcabc".to_string()),
+                AnyDataValue::new_plain_string(r"(abc)\1".to_string()),
+            ]),
+            Some(AnyDataValue::new_boolean(true))
+        );
+
+        // Pattern and flags must be plain strings
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_language_tagged_string("abc".to_string(), "en".to_string()),
+            ]),
+            None
+        );
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_language_tagged_string("i".to_string(), "en".to_string()),
+            ]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_string_replace() {
+        // Capture group references in the replacement
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("([ab])(.*)".to_string()),
+                AnyDataValue::new_plain_string("$2".to_string()),
+            ]),
+            Some(AnyDataValue::new_plain_string("bc".to_string()))
+        );
+
+        // Invalid flags are rejected instead of being spliced into the pattern
+        // (otherwise "i:." would introduce a capture group "(?i:.)",
+        // shifting all capture group references)
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("([ab])(.*)".to_string()),
+                AnyDataValue::new_plain_string("$2".to_string()),
+                AnyDataValue::new_plain_string("i:.".to_string()),
+            ]),
+            None
+        );
+
+        // Case-insensitive replacement
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("aBc".to_string()),
+                AnyDataValue::new_plain_string("b".to_string()),
+                AnyDataValue::new_plain_string("x".to_string()),
+                AnyDataValue::new_plain_string("i".to_string()),
+            ]),
+            Some(AnyDataValue::new_plain_string("axc".to_string()))
+        );
+
+        // The q flag treats both pattern and replacement literally
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                AnyDataValue::new_plain_string(".".to_string()),
+                AnyDataValue::new_plain_string("$1".to_string()),
+                AnyDataValue::new_plain_string("q".to_string()),
+            ]),
+            Some(AnyDataValue::new_plain_string("a$1c".to_string()))
+        );
+
+        // The language tag of the input is kept
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_language_tagged_string("abc".to_string(), "en".to_string()),
+                AnyDataValue::new_plain_string("b".to_string()),
+                AnyDataValue::new_plain_string("x".to_string()),
+            ]),
+            Some(AnyDataValue::new_language_tagged_string(
+                "axc".to_string(),
+                "en".to_string()
+            ))
+        );
+
+        // Pattern and replacement must be plain strings
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_language_tagged_string("b".to_string(), "en".to_string()),
+                AnyDataValue::new_plain_string("x".to_string()),
+            ]),
+            None
+        );
     }
 
     #[test]

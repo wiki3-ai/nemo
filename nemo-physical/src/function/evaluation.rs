@@ -120,11 +120,8 @@ impl StackProgram {
                         return Err(Error::MalformedStackProgram);
                     }
 
-                    if *parameter_count == 0 {
-                        current_height += 1;
-                    } else {
-                        current_height -= parameter_count - 1;
-                    }
+                    current_height -= parameter_count;
+                    current_height += 1;
                 }
             }
 
@@ -1199,8 +1196,6 @@ mod test {
         evaluate_expect(&tree_non_string, None);
     }
 
-    // ── Helpers for date/time tests ──────────────────────────────────────────
-
     fn any_datetime(lex: &str) -> AnyDataValue {
         AnyDataValue::new_other(
             lex.to_string(),
@@ -1511,34 +1506,26 @@ mod test {
             &Function::datetime_seconds(Function::constant(any_datetime(
                 "1999-05-31T13:20:00-05:00",
             ))),
-            Some(any_double(0.0)),
+            Some(AnyDataValue::new_integer_from_i64(0)),
         );
         // SPARQL §17.4.5.7: SECONDS("2011-01-10T14:45:13.815-05:00") → 13.815
-        let result = StackProgram::from_function_tree(
+        evaluate_expect(
             &Function::datetime_seconds(Function::constant(any_datetime(
                 "2011-01-10T14:45:13.815-05:00",
             ))),
-            &HashMap::new(),
-            None,
-        )
-        .evaluate(&[], None)
-        .unwrap();
-        assert!(
-            (result.to_f64_unchecked() - 13.815_f64).abs() < 1e-6,
-            "expected 13.815, got {result:?}"
+            Some(
+                AnyDataValue::new_from_decimal_literal("13.815".to_string())
+                    .expect("valid decimal literal"),
+            ),
         );
 
         // XPath §9.5.14: fn:seconds-from-time("13:20:10.5") → 10.5
-        let result = StackProgram::from_function_tree(
+        evaluate_expect(
             &Function::datetime_seconds(Function::constant(any_time("13:20:10.5"))),
-            &HashMap::new(),
-            None,
-        )
-        .evaluate(&[], None)
-        .unwrap();
-        assert!(
-            (result.to_f64_unchecked() - 10.5_f64).abs() < 1e-9,
-            "expected 10.5, got {result:?}"
+            Some(
+                AnyDataValue::new_from_decimal_literal("10.5".to_string())
+                    .expect("valid decimal literal"),
+            ),
         );
 
         // Wrong datatype → None
@@ -1645,29 +1632,51 @@ mod test {
         let program_struuid =
             StackProgram::from_function_tree(&Function::func_struuid(), &HashMap::new(), None);
 
-        // RAND() must produce a double in [0, 1)
-        let r = program_rand.evaluate_data(&[]).unwrap();
-        assert_eq!(r.value_domain(), ValueDomain::Double);
-        let v = r.to_f64_unchecked();
-        assert!((0.0..1.0).contains(&v), "RAND() out of range: {v}");
-
-        // UUID() must produce an IRI of the form urn:uuid:…
-        let u = program_uuid.evaluate_data(&[]).unwrap();
-        assert_eq!(u.value_domain(), ValueDomain::Iri);
+        // RAND() must produce doubles in [0, 1) and not always the same value
+        let samples: Vec<f64> = (0..100)
+            .map(|_| {
+                let r = program_rand.evaluate_data(&[]).unwrap();
+                assert_eq!(r.value_domain(), ValueDomain::Double);
+                r.to_f64_unchecked()
+            })
+            .collect();
+        for v in &samples {
+            assert!((0.0..1.0).contains(v), "RAND() out of range: {v}");
+        }
         assert!(
-            u.to_iri_unchecked().starts_with("urn:uuid:"),
-            "UUID() IRI has wrong prefix: {}",
-            u.to_iri_unchecked()
+            samples.iter().any(|v| *v != samples[0]),
+            "RAND() always returns the same value: {}",
+            samples[0]
         );
 
-        // STRUUID() must produce a plain string that looks like a UUID (36 chars, hex + dashes)
+        // UUID() must produce an IRI holding a valid UUID of the form urn:uuid:…
+        let u = program_uuid.evaluate_data(&[]).unwrap();
+        assert_eq!(u.value_domain(), ValueDomain::Iri);
+        let iri = u.to_iri_unchecked();
+        let uuid = iri
+            .strip_prefix("urn:uuid:")
+            .unwrap_or_else(|| panic!("UUID() IRI has wrong prefix: {iri}"));
+        assert!(
+            uuid::Uuid::try_parse(uuid).is_ok(),
+            "UUID() IRI does not contain a valid UUID: {iri}"
+        );
+
+        // STRUUID() must produce a plain string holding a valid UUID
         let s = program_struuid.evaluate_data(&[]).unwrap();
         assert_eq!(s.value_domain(), ValueDomain::PlainString);
         let s_str = s.to_plain_string_unchecked();
-        assert_eq!(s_str.len(), 36, "STRUUID() wrong length: {s_str}");
         assert!(
-            s_str.chars().all(|c| c.is_ascii_hexdigit() || c == '-'),
-            "STRUUID() unexpected characters: {s_str}"
+            uuid::Uuid::try_parse(&s_str).is_ok(),
+            "STRUUID() is not a valid UUID: {s_str}"
         );
+        assert_eq!(
+            s_str,
+            s_str.to_lowercase(),
+            "STRUUID() is not lowercase: {s_str}"
+        );
+
+        // Two UUIDs must not be equal
+        let u2 = program_uuid.evaluate_data(&[]).unwrap();
+        assert_ne!(u, u2, "UUID() returned the same value twice");
     }
 }

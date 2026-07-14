@@ -11,12 +11,14 @@ pub(crate) mod nondeterministic;
 pub(crate) mod numeric;
 pub(crate) mod string;
 
+pub use datetime::set_now_timestamp;
+
 use casting::CastingIntoIri;
 use nondeterministic::{FuncRand, FuncStruuid, FuncUuid};
 
 use datetime::{
     DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds, DateTimeTimezone,
-    DateTimeTz, DateTimeYear,
+    DateTimeTz, DateTimeYear, FuncNow,
 };
 use delegate::delegate;
 use hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512};
@@ -138,6 +140,11 @@ pub trait UnaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [UnaryFunction]
@@ -292,6 +299,7 @@ impl UnaryFunction for UnaryFunctionEnum {
         } {
             fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
     }
 }
@@ -310,6 +318,11 @@ pub trait BinaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [BinaryFunction]
@@ -404,6 +417,7 @@ impl BinaryFunction for BinaryFunctionEnum {
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
     }
 }
@@ -423,6 +437,11 @@ pub trait TernaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [TernaryFunction]
@@ -439,6 +458,7 @@ impl TernaryFunction for TernaryFunctionEnum {
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue, third_paramter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
     }
 }
@@ -453,6 +473,11 @@ pub trait NullaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [NullaryFunction]
@@ -464,6 +489,8 @@ pub enum NullaryFunctionEnum {
     FuncUuid(FuncUuid),
     /// Fresh UUID as a plain string
     FuncStruuid(FuncStruuid),
+    /// Current date and time
+    FuncNow(FuncNow),
 }
 
 impl NullaryFunction for NullaryFunctionEnum {
@@ -472,17 +499,12 @@ impl NullaryFunction for NullaryFunctionEnum {
             Self::FuncRand(function) => function,
             Self::FuncUuid(function) => function,
             Self::FuncStruuid(function) => function,
+            Self::FuncNow(function) => function,
         } {
             fn evaluate(&self) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
-    }
-}
-
-impl NullaryFunctionEnum {
-    /// Return `true` if this function is nondeterministic (must not be constant-folded).
-    pub(crate) fn is_nondeterministic(&self) -> bool {
-        true
     }
 }
 
@@ -496,6 +518,11 @@ pub trait NaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [NaryFunction]
@@ -548,6 +575,7 @@ impl NaryFunction for NaryFunctionEnum {
         } {
             fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
     }
 }

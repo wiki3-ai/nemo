@@ -4,7 +4,10 @@ use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 use crate::{
     datavalues::{AnyDataValue, DataValue},
-    function::definitions::language::LanguageString,
+    function::definitions::{
+        BinaryFunction, NaryFunction, NullaryFunction, TernaryFunction, UnaryFunction,
+        language::LanguageString,
+    },
 };
 
 use super::{
@@ -19,7 +22,7 @@ use super::{
         },
         datetime::{
             DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds,
-            DateTimeTimezone, DateTimeTz, DateTimeYear,
+            DateTimeTimezone, DateTimeTz, DateTimeYear, FuncNow,
         },
         generic::{CanonicalString, Datatype, Equals, LexicalValue, TypedLiteral, Unequals},
         hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512},
@@ -139,7 +142,7 @@ where
     /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
     /// Returns `None` if this is not the case.
     pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
-        if self.references().is_empty() && !self.is_nondeterministic() {
+        if self.references().is_empty() && self.is_deterministic() {
             let constant_program =
                 StackProgram::from_function_tree(self, &HashMap::default(), None);
 
@@ -209,6 +212,10 @@ where
     }
 
     /// A (mutable) iterator over the leaves of this tree.
+    ///
+    /// Note that only [FunctionTree::Leaf] nodes are considered leaves;
+    /// in particular, nullary functions are not. As a consequence,
+    /// a finite tree may have no leaves at all, e.g. `Sum(Rand, Rand)`.
     pub fn leaves(&mut self) -> impl Iterator<Item = &mut FunctionTree<ReferenceType>> {
         let mut result = Vec::new();
         match self {
@@ -932,27 +939,42 @@ where
 
     /// Create a tree node representing the MD5 hash of a string.
     pub fn string_md5(sub: Self) -> Self {
-        Self::Unary(UnaryFunctionEnum::StringMd5(StringMd5), Box::new(sub))
+        Self::Unary(
+            UnaryFunctionEnum::StringMd5(StringMd5::default()),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node representing the SHA1 hash of a string.
     pub fn string_sha1(sub: Self) -> Self {
-        Self::Unary(UnaryFunctionEnum::StringSha1(StringSha1), Box::new(sub))
+        Self::Unary(
+            UnaryFunctionEnum::StringSha1(StringSha1::default()),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node representing the SHA256 hash of a string.
     pub fn string_sha256(sub: Self) -> Self {
-        Self::Unary(UnaryFunctionEnum::StringSha256(StringSha256), Box::new(sub))
+        Self::Unary(
+            UnaryFunctionEnum::StringSha256(StringSha256::default()),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node representing the SHA384 hash of a string.
     pub fn string_sha384(sub: Self) -> Self {
-        Self::Unary(UnaryFunctionEnum::StringSha384(StringSha384), Box::new(sub))
+        Self::Unary(
+            UnaryFunctionEnum::StringSha384(StringSha384::default()),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node representing the SHA512 hash of a string.
     pub fn string_sha512(sub: Self) -> Self {
-        Self::Unary(UnaryFunctionEnum::StringSha512(StringSha512), Box::new(sub))
+        Self::Unary(
+            UnaryFunctionEnum::StringSha512(StringSha512::default()),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node extracting the year from an XSD date/dateTime (YEAR).
@@ -1023,6 +1045,11 @@ where
     /// Create a zero-arg tree node for STRUUID().
     pub fn func_struuid() -> Self {
         Self::Nullary(NullaryFunctionEnum::FuncStruuid(FuncStruuid))
+    }
+
+    /// Create a zero-arg tree node for NOW().
+    pub fn func_now() -> Self {
+        Self::Nullary(NullaryFunctionEnum::FuncNow(FuncNow))
     }
 
     /// Create a tree node representing the bitwise and operation.
@@ -1235,29 +1262,49 @@ where
 
     /// Return whether this tree contains a nondeterministic function.
     ///
-    /// Nondeterministic functions (RAND, UUID, STRUUID) must not be constant-folded —
-    /// they need to be re-evaluated for every row.
+    /// Nondeterministic functions (e.g. RAND, UUID, STRUUID) must not be constant-folded
+    /// since they need to be re-evaluated for every row.
     pub fn is_nondeterministic(&self) -> bool {
         match self {
             FunctionTree::Leaf(_) => false,
-            FunctionTree::Unary(_, sub) => sub.is_nondeterministic(),
-            FunctionTree::Binary { left, right, .. } => {
-                left.is_nondeterministic() || right.is_nondeterministic()
+            FunctionTree::Unary(function, sub) => {
+                function.is_nondeterministic() || sub.is_nondeterministic()
+            }
+            FunctionTree::Binary {
+                function,
+                left,
+                right,
+            } => {
+                function.is_nondeterministic()
+                    || left.is_nondeterministic()
+                    || right.is_nondeterministic()
             }
             FunctionTree::Ternary {
+                function,
                 first,
                 second,
                 third,
-                ..
             } => {
-                first.is_nondeterministic()
+                function.is_nondeterministic()
+                    || first.is_nondeterministic()
                     || second.is_nondeterministic()
                     || third.is_nondeterministic()
             }
             FunctionTree::Nullary(function) => function.is_nondeterministic(),
-            FunctionTree::Nary { parameters, .. } => {
-                parameters.iter().any(|p| p.is_nondeterministic())
+            FunctionTree::Nary {
+                function,
+                parameters,
+            } => {
+                function.is_nondeterministic() || parameters.iter().any(|p| p.is_nondeterministic())
             }
         }
+    }
+
+    /// Return whether this tree contains only deterministic functions.
+    ///
+    /// Deterministic trees always evaluate to the same value
+    /// and may therefore be constant-folded.
+    pub fn is_deterministic(&self) -> bool {
+        !self.is_nondeterministic()
     }
 }

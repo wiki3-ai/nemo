@@ -135,7 +135,6 @@ impl UnaryFunction for Datatype {
 ///
 /// Corresponds to SPARQL STRDT(lexical_form, datatype_IRI).
 /// Returns a literal with the given lexical form and datatype.
-/// Well-known XSD types (integer, double, etc.) are normalized to their native representation.
 ///
 /// Returns `None` if the first argument is not a plain string or if the second argument is not an IRI.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
