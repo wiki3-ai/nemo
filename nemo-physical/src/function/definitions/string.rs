@@ -446,6 +446,10 @@ static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<(String, String), Regex>>> = On
 /// Compile the regular expression `pattern` under the given `flags`,
 /// consulting a cache of previous compilations first.
 ///
+/// The pattern uses the syntax of the [fancy_regex] crate,
+/// which closely matches, but is not identical to,
+/// the regular expression syntax of the XPath specification.
+///
 /// The available flags are defined by the
 /// [XPath specification](https://www.w3.org/TR/xpath-functions/#flags):
 /// `s` (dot matches newline), `m` (multi-line), `i` (case-insensitive),
@@ -455,7 +459,7 @@ static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<(String, String), Regex>>> = On
 ///
 /// Returns `None` if `flags` contains any other character
 /// or if `pattern` is not a valid regular expression.
-fn compile_regex(pattern: &str, flags: &str) -> Option<Regex> {
+fn compile_regex(pattern: String, flags: String) -> Option<Regex> {
     let mut case_insensitive = false;
     let mut multi_line = false;
     let mut dot_matches_new_line = false;
@@ -478,27 +482,30 @@ fn compile_regex(pattern: &str, flags: &str) -> Option<Regex> {
         .lock()
         .expect("no thread should panic while holding the lock");
 
-    cache
-        .try_get_or_insert((pattern.to_string(), flags.to_string()), || {
-            let pattern = if literal {
-                escape(pattern)
-            } else {
-                Cow::Borrowed(pattern)
-            };
+    let key = (pattern, flags);
+    if let Some(regex) = cache.get(&key) {
+        return Some(regex.clone());
+    }
 
-            let mut builder = RegexBuilder::new(&pattern);
-            builder.case_insensitive(case_insensitive);
-            if !literal {
-                builder
-                    .multi_line(multi_line)
-                    .dot_matches_new_line(dot_matches_new_line)
-                    .ignore_whitespace(ignore_whitespace);
-            }
+    let pattern = if literal {
+        escape(&key.0)
+    } else {
+        Cow::Borrowed(key.0.as_str())
+    };
 
-            builder.build()
-        })
-        .ok()
-        .cloned()
+    let mut builder = RegexBuilder::new(&pattern);
+    builder.case_insensitive(case_insensitive);
+    if !literal {
+        builder
+            .multi_line(multi_line)
+            .dot_matches_new_line(dot_matches_new_line)
+            .ignore_whitespace(ignore_whitespace);
+    }
+
+    let regex = builder.build().ok()?;
+    cache.put(key, regex.clone());
+
+    Some(regex)
 }
 
 /// Regex string matching
@@ -527,7 +534,7 @@ impl NaryFunction for StringRegex {
             None => String::default(),
         };
 
-        let regex = compile_regex(&pattern, &flags)?;
+        let regex = compile_regex(pattern, flags)?;
         let is_match = regex.is_match(&text.string).ok()?;
 
         Some(AnyDataValue::new_boolean(is_match))
@@ -877,6 +884,15 @@ impl TernaryFunction for StringSubstringLength {
 /// Replacement may reference capture groups via `$1`, `$2`, etc.; use `$$` for a literal `$`.
 /// Under the `q` flag, the replacement is used literally.
 ///
+/// The replacement string follows the conventions of the [fancy_regex] crate,
+/// which deviate from the XPath specification in the following respects:
+/// a literal `$` is written as `$$` instead of `\$`,
+/// a backslash has no special meaning,
+/// references to capture groups that do not exist in the pattern
+/// expand to the empty string instead of being an error,
+/// and patterns that match a zero-length string are permitted
+/// (where XPath raises an error).
+///
 /// Returns `None` if the first parameter is not a (language tagged) string,
 /// if the pattern, replacement, or flags are not plain strings,
 /// if the flags are invalid, or if the pattern is not a valid regex.
@@ -896,8 +912,9 @@ impl NaryFunction for StringReplace {
             None => String::default(),
         };
 
-        let regex = compile_regex(&pattern, &flags)?;
-        let result = if flags.contains('q') {
+        let literal = flags.contains('q');
+        let regex = compile_regex(pattern, flags)?;
+        let result = if literal {
             regex.try_replacen(&input.string, 0, NoExpand(&replacement))
         } else {
             regex.try_replacen(&input.string, 0, replacement.as_str())
@@ -936,13 +953,15 @@ impl BinaryFunction for StringLangMatches {
         let tag = parameter_first.to_plain_string()?;
         let range = parameter_second.to_plain_string()?;
 
-        let tag_lc = tag.to_lowercase();
-        let range_lc = range.to_lowercase();
+        let tag = tag.as_bytes();
+        let range = range.as_bytes();
 
-        let matches = if range_lc == "*" {
-            !tag_lc.is_empty()
+        let matches = if range == b"*" {
+            !tag.is_empty()
         } else {
-            tag_lc == range_lc || tag_lc.starts_with(&format!("{range_lc}-"))
+            tag.len() >= range.len()
+                && tag[..range.len()].eq_ignore_ascii_case(range)
+                && (tag.len() == range.len() || tag[range.len()] == b'-')
         };
 
         Some(AnyDataValue::new_boolean(matches))
