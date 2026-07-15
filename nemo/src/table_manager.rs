@@ -7,7 +7,7 @@ use nemo_physical::{
     management::{
         bytesized::ByteSized,
         database::{
-            DatabaseInstance, Dict,
+            self, DatabaseInstance, Dict,
             id::{ExecutionId, PermanentTableId},
             sources::TableSource,
         },
@@ -20,7 +20,7 @@ use nemo_physical::{
 use std::{
     cell::{Ref, RefMut},
     cmp::Ordering,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     hash::Hash,
     ops::Range,
 };
@@ -338,6 +338,11 @@ pub(crate) struct TableManager {
 
     /// Mapping predicate identifiers to a [PredicateInfo] which contains relevant information.
     predicate_to_info: HashMap<Tag, PredicateInfo>,
+
+    /// Number of edbs loaded
+    edbs: usize,
+    /// Highest [PermanentTableId] used for edb imports if set
+    last_edb_table: Option<PermanentTableId>,
 }
 
 impl Default for TableManager {
@@ -353,10 +358,12 @@ impl TableManager {
             database: DatabaseInstance::default(),
             predicate_subtables: HashMap::new(),
             predicate_to_info: HashMap::new(),
+            edbs: 0usize,
+            last_edb_table: None,
         }
     }
 
-    /// Return a mutbale reference to the [DatabaseInstance].
+    /// Return a mutable reference to the [DatabaseInstance].
     pub(crate) fn database_mut(&mut self) -> &mut DatabaseInstance {
         &mut self.database
     }
@@ -512,6 +519,11 @@ impl TableManager {
 
         let table_id = self.database.register_table(&name, arity);
         self.database.add_sources(table_id, edb_order, sources);
+
+        // Assumptions:
+        // - EDBs are always added before IDBs
+        // - EDBS are added in ascending ID order
+        self.last_edb_table = Some(table_id);
 
         self.add_subtable(SubtableIdentifier::new(predicate, EDB_STEP), table_id)
     }
@@ -857,6 +869,14 @@ impl TableManager {
             .database
             .execute_plan_trie(subtable_plan.execution_plan)
             .await?)
+    }
+
+    /// Remove all derived data
+    /// Keeping imports
+    pub fn remove_idbs(&mut self) {
+        if let Some(table_id) = self.last_edb_table {
+            self.database.delete_from(table_id, self.edbs);
+        }
     }
 }
 

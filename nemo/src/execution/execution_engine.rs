@@ -434,6 +434,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .map(|step| self.step_times_ms.get(step).cloned().unwrap_or_default())
             .sum()
     }
+
+    /// removes all derived data leaving only imports
+    pub fn reset(&mut self) {
+        self.table_manager.remove_idbs();
+    }
 }
 
 #[cfg(test)]

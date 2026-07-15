@@ -184,4 +184,32 @@ mod test {
         // Disabled:
         // write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();
     }
+
+    #[cfg_attr(miri, ignore)]
+    #[tokio::test]
+    async fn remove_reason() {
+        std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
+        let mut engine = load("run-lcs-10.rls".into()).await.unwrap();
+        super::reason(&mut engine).await.unwrap();
+
+        // writing only the results where the predicates contain an "i"
+        let results = output_predicates(&engine)
+            .into_iter()
+            .filter(|pred| pred.to_string().contains('i'))
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 4);
+
+        engine.reset();
+
+        // What happens now?
+
+        // writing only the results where the predicates contain an "i"
+        let results = output_predicates(&engine)
+            .into_iter()
+            .filter(|pred| pred.to_string().contains('i'))
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 4);
+    }
 }
