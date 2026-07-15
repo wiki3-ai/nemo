@@ -1,6 +1,6 @@
 //! This module defines hash functions on strings.
 
-use std::marker::PhantomData;
+use std::{fmt::Write, marker::PhantomData};
 
 use digest::Digest;
 use md5::Md5;
@@ -45,7 +45,11 @@ impl<D: Digest> UnaryFunction for StringHash<D> {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         let string = parameter.to_plain_string()?;
         let digest = D::digest(string.as_bytes());
-        let hex = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+
+        let mut hex = String::with_capacity(digest.len() * 2);
+        for byte in digest {
+            write!(hex, "{byte:02x}").expect("writing to a string should not fail");
+        }
 
         Some(AnyDataValue::new_plain_string(hex))
     }
