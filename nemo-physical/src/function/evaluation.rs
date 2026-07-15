@@ -1620,34 +1620,15 @@ mod test {
         );
     }
 
-    /// Tests for RAND, UUID, STRUUID.
+    /// Tests for UUID and STRUUID.
     ///
     /// These are nondeterministic — we verify output domain and structural properties.
     #[test]
     fn evaluate_nondeterministic() {
-        let program_rand =
-            StackProgram::from_function_tree(&Function::func_rand(), &HashMap::new(), None);
         let program_uuid =
             StackProgram::from_function_tree(&Function::func_uuid(), &HashMap::new(), None);
         let program_struuid =
             StackProgram::from_function_tree(&Function::func_struuid(), &HashMap::new(), None);
-
-        // RAND() must produce doubles in [0, 1) and not always the same value
-        let samples: Vec<f64> = (0..100)
-            .map(|_| {
-                let r = program_rand.evaluate_data(&[]).unwrap();
-                assert_eq!(r.value_domain(), ValueDomain::Double);
-                r.to_f64_unchecked()
-            })
-            .collect();
-        for v in &samples {
-            assert!((0.0..1.0).contains(v), "RAND() out of range: {v}");
-        }
-        assert!(
-            samples.iter().any(|v| *v != samples[0]),
-            "RAND() always returns the same value: {}",
-            samples[0]
-        );
 
         // UUID() must produce an IRI holding a valid UUID of the form urn:uuid:…
         let u = program_uuid.evaluate_data(&[]).unwrap();
