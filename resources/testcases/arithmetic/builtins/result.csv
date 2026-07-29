@@ -126,3 +126,12 @@ uuid_iri,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
 struuid_length,36
 now_datatype,http://www.w3.org/2001/XMLSchema#dateTime
 now_year,"""ok"""
+langmatches_empty_wildcard,"""false""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+langmatches_case,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+dt_year_neg,-2
+dt_year_eod,2000
+dt_hours_eod,0
+dt_hours_offset,10
+dt_tz_pos,"""+05:30"""
+dt_timezone_date,"""-PT5H""^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"
+dt_timezone_time,"""-PT5H""^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"
