@@ -63,4 +63,9 @@ env_logger = { workspace = true }
 assert_fs = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true, features = [ "rt", "macros" ] }
+criterion = { version = "0.8.2", default-features = false, features = [ "cargo_bench_support" ] }
+
+[[bench]]
+name = "parser"
+harness = false
 
