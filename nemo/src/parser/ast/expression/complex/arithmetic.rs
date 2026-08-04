@@ -8,7 +8,6 @@ use nom::{
     multi::many0,
     sequence::{delimited, pair, preceded, separated_pair},
 };
-use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::parser::{
     ParserResult,
@@ -19,7 +18,7 @@ use crate::parser::{
         token::{Token, TokenKind},
     },
     context::{ParserContext, context},
-    error::ParserErrorTree,
+    error::ParserErrors,
     input::ParserInput,
     span::Span,
 };
@@ -264,10 +263,7 @@ impl<'a> ProgramAST<'a> for Arithmetic<'a> {
                 return Ok((rest, result));
             }
 
-            Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Expected(Expectation::Tag("arithmetic expression")),
-            }))
+            Err(nom::Err::Error(ParserErrors::at(input.span)))
         };
 
         context(CONTEXT, arithmetic_parser)(input)

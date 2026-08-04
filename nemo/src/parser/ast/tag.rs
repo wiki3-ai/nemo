@@ -3,12 +3,11 @@
 use std::cmp::Ordering;
 
 use nom::InputTake;
-use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::parser::{
     ParserResult,
     ast::token::{is_name_continue, is_name_start},
-    error::ParserErrorTree,
+    error::ParserErrors,
     input::ParserInput,
 };
 
@@ -92,17 +91,11 @@ fn identifier_length(input: &str) -> Option<usize> {
 fn parse_keyword<'a, Kind>(
     input: ParserInput<'a>,
     table: &KeywordTable<Kind>,
-    expected: &'static str,
 ) -> ParserResult<'a, Kind>
 where
     Kind: Copy,
 {
-    let error = || {
-        nom::Err::Error(ParserErrorTree::Base {
-            location: input.clone(),
-            kind: BaseErrorKind::Expected(Expectation::Tag(expected)),
-        })
-    };
+    let error = || nom::Err::Error(ParserErrors::at(input.span));
 
     let fragment = input.span.fragment();
     let Some(length) = identifier_length(fragment) else {

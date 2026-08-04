@@ -55,8 +55,7 @@ impl<'a> ProgramAST<'a> for DataTypeTag<'a> {
     where
         Self: Sized + 'a,
     {
-        let keyword_parser =
-            |input: ParserInput<'a>| parse_keyword(input, &DATA_TYPES, "data type");
+        let keyword_parser = |input: ParserInput<'a>| parse_keyword(input, &DATA_TYPES);
 
         let input_span = input.span;
 

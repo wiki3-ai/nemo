@@ -64,8 +64,7 @@ impl<'a> ProgramAST<'a> for AggregationTag<'a> {
     where
         Self: Sized + 'a,
     {
-        let keyword_parser =
-            |input: ParserInput<'a>| parse_keyword(input, &AGGREGATES, "aggregation name");
+        let keyword_parser = |input: ParserInput<'a>| parse_keyword(input, &AGGREGATES);
 
         let input_span = input.span;
 

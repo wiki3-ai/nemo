@@ -13,13 +13,12 @@ use nom::{
     combinator::{map, opt, recognize, verify},
     sequence::pair,
 };
-use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::{
     parser::{
         ParserInput, ParserResult,
         context::{ParserContext, context},
-        error::ParserErrorTree,
+        error::ParserErrors,
         span::Span,
     },
     rule_model::components::ComponentSource,
@@ -466,14 +465,8 @@ impl<'a> Token<'a> {
             .filter_map(|tag| input.find_substring(tag))
             .min()
         {
-            None => Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Expected(Expectation::Tag(tags[0])),
-            })),
-            Some(0) => Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Kind(nom::error::ErrorKind::Eof),
-            })),
+            None => Err(nom::Err::Error(ParserErrors::at(input.span))),
+            Some(0) => Err(nom::Err::Error(ParserErrors::at(input.span))),
             Some(idx @ 1..) => {
                 let (rest, result) = input.take_split(idx);
                 Ok((

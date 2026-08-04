@@ -57,8 +57,7 @@ impl<'a> ProgramAST<'a> for OperationTag<'a> {
     where
         Self: Sized + 'a,
     {
-        let keyword_parser =
-            |input: ParserInput<'a>| parse_keyword(input, &OPERATIONS, "operation name");
+        let keyword_parser = |input: ParserInput<'a>| parse_keyword(input, &OPERATIONS);
 
         let input_span = input.span;
 

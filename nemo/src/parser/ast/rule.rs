@@ -61,7 +61,7 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
         context(
             CONTEXT,
             separated_pair(
-                Sequence::<Guard>::parse,
+                Sequence::<Guard>::parse1,
                 tuple((WSoC::parse, Token::rule_arrow, WSoC::parse)),
                 Sequence::<Guard>::parse,
             ),
