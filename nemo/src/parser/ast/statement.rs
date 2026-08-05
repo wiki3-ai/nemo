@@ -20,7 +20,7 @@ use super::{
     comment::{doc::DocComment, wsoc::WSoC},
     directive::Directive,
     guard::Guard,
-    rule::Rule,
+    rule::{Rule, RuleOrFact},
     token::Token,
 };
 
@@ -59,8 +59,8 @@ impl<'a> StatementKind<'a> {
         let (rest, first) = Guard::parse(input)?;
 
         match Rule::parse_continued(first, input_span, rest)? {
-            (rest, Ok(rule)) => Ok((rest, Self::Rule(rule))),
-            (rest, Err(guard)) => Ok((rest, Self::Fact(guard))),
+            (rest, RuleOrFact::Rule(rule)) => Ok((rest, Self::Rule(rule))),
+            (rest, RuleOrFact::Fact(guard)) => Ok((rest, Self::Fact(guard))),
         }
     }
 

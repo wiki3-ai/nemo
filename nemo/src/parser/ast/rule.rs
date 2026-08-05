@@ -24,6 +24,15 @@ pub struct Rule<'a> {
     body: Sequence<'a, Guard<'a>>,
 }
 
+/// What a statement beginning with a [Guard] turned out to be.
+#[derive(Debug)]
+pub(crate) enum RuleOrFact<'a> {
+    /// A rule
+    Rule(Rule<'a>),
+    /// A guard that no rule arrow followed
+    Fact(Guard<'a>),
+}
+
 impl<'a> Rule<'a> {
     /// Create a new [Rule] from parts that have already been parsed.
     pub(crate) fn new(
@@ -38,18 +47,23 @@ impl<'a> Rule<'a> {
     ///
     /// Hands the guard back, having consumed nothing further, when no rule
     /// arrow follows: it is then a fact rather than a rule head.
+    ///
+    /// Both fact cases return `input`, discarding the head elements parsed
+    /// speculatively. Returning the position after them instead would swallow a
+    /// trailing separator, and `a(1),.` would parse as a fact followed by the
+    /// `.` its caller demands.
     pub(crate) fn parse_continued(
         first: Guard<'a>,
         input_span: Span<'a>,
         input: ParserInput<'a>,
-    ) -> ParserResult<'a, Result<Self, Guard<'a>>> {
+    ) -> ParserResult<'a, RuleOrFact<'a>> {
         let Ok((rest_head, mut head)) = Sequence::<Guard>::parse_continued(input.clone()) else {
-            return Ok((input, Err(first)));
+            return Ok((input, RuleOrFact::Fact(first)));
         };
 
         let arrow = tuple((WSoC::parse, Token::rule_arrow, WSoC::parse))(rest_head);
         let Ok((rest_arrow, _)) = arrow else {
-            return Ok((input, Err(first)));
+            return Ok((input, RuleOrFact::Fact(first)));
         };
 
         let (rest, body) = Sequence::<Guard>::parse(rest_arrow)?;
@@ -57,7 +71,10 @@ impl<'a> Rule<'a> {
 
         head.insert(0, first);
 
-        Ok((rest, Ok(Self::new(span, Sequence::new(span, head), body))))
+        Ok((
+            rest,
+            RuleOrFact::Rule(Self::new(span, Sequence::new(span, head), body)),
+        ))
     }
 
     /// Return an iterator of the [Guard]s contained in the head.
@@ -98,8 +115,8 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
             let (rest, first) = Guard::parse(input)?;
 
             match Self::parse_continued(first, input_span, rest)? {
-                (rest, Ok(rule)) => Ok((rest, rule)),
-                (rest, Err(_)) => Err(nom::Err::Error(ParserErrors::at(rest.span))),
+                (rest, RuleOrFact::Rule(rule)) => Ok((rest, rule)),
+                (rest, RuleOrFact::Fact(_)) => Err(nom::Err::Error(ParserErrors::at(rest.span))),
             }
         };
 
