@@ -162,15 +162,21 @@ impl SubtableHandler {
         while current_start <= target_end {
             let mut best: Option<(SubtableRange, PermanentTableId)> = None;
 
-            for &(current_interval, id) in self.combined.iter().skip(interval_index) {
-                interval_index += 1;
+            for (index, &(current_interval, id)) in
+                self.combined.iter().enumerate().skip(interval_index)
+            {
                 let (start, end) = current_interval.start_end();
 
                 if start > current_start {
+                    // Intervals are sorted by start, so this and all following
+                    // intervals may still be usable for a later `current_start`.
+                    interval_index = index;
                     break;
                 }
 
-                if start < target_start || end > target_end {
+                interval_index = index + 1;
+
+                if start < current_start || start < target_start || end > target_end {
                     continue;
                 }
 
