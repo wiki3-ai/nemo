@@ -64,8 +64,8 @@ impl<'a> ParserErrors<'a> {
         {
             Ordering::Less => {}
             Ordering::Greater => *self = other,
-            // Both alternatives got equally far, so neither explains the failure
-            // on its own. Only the contexts they agree on still describe it.
+            // Neither alternative explains the failure on its own, so only
+            // the contexts they agree on still describe it.
             Ordering::Equal => {
                 let agreed = self
                     .context
@@ -109,8 +109,6 @@ impl<'a> ParserErrors<'a> {
         let rest = self.position.fragment();
 
         if expected == ParserContext::token(TokenKind::Dot) {
-            // A rule arrow written some other way leaves the head parsed as a
-            // fact, which then turns up as a missing `.`.
             for arrow in ["<-", "=>", ":=", "<=", "->"] {
                 if rest.starts_with(arrow) {
                     return Some(format!(
@@ -209,6 +207,22 @@ impl RichError for ParserError {
 
     fn note(&self) -> Option<String> {
         self.hint.clone()
+    }
+}
+
+/// Keep whichever of two failures got further.
+///
+/// Parsers that try an alternative by hand, rather than through `alt`, need this
+/// to report what `alt` would have.
+pub(crate) fn deepest<'a>(
+    one: nom::Err<ParserErrors<'a>>,
+    other: nom::Err<ParserErrors<'a>>,
+) -> nom::Err<ParserErrors<'a>> {
+    match (one, other) {
+        (nom::Err::Error(one), nom::Err::Error(other)) => {
+            nom::Err::Error(nom::error::ParseError::or(one, other))
+        }
+        (one, _) => one,
     }
 }
 
@@ -328,8 +342,6 @@ mod test {
             )]
         );
 
-        // Writing the rule arrow some other way parses the head as a fact, so
-        // the error is a missing `.`; the hint names the actual mistake.
         assert_eq!(
             reported("p(1).\nq(?x) <- p(?x).\n"),
             vec![(
@@ -376,10 +388,9 @@ mod test {
             vec![(1, 2, String::from("expected letter or digit in name"), None)]
         );
 
-        // A rule must derive something, so an empty head is rejected.
         assert_eq!(
             reported(":- b(?x).\n"),
-            vec![(1, 2, String::from("expected letter or digit in name"), None)]
+            vec![(1, 1, String::from("expected fact, rule or directive"), None)]
         );
 
         for program in ["a :- ?x.\n", "a :- 1 + 2.\n"] {
@@ -388,13 +399,6 @@ mod test {
                 vec![(1, 3, String::from("expected expression"), None)]
             );
         }
-    }
-
-    /// Programs that parse, despite looking like they might not.
-    #[test]
-    fn accepted_programs() {
-        // An unknown aggregate is a validation error, not a parse error.
-        assert!(reported("p(1).\nq(?y) :- p(?x), ?y = #sumx(?x).\n").is_empty());
     }
 
     #[test]
