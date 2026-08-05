@@ -98,8 +98,6 @@ mod test {
             ("sum", OperationKind::NumericSum),
             ("STRLEN", OperationKind::StringLength),
             ("IsNumeric", OperationKind::CheckIsNumeric),
-            // `STR` is a prefix of seven other operation names; it must still
-            // resolve to itself when it makes up the whole identifier.
             ("STR", OperationKind::LexicalValue),
             ("NUMGREATER", OperationKind::NumericGreaterthan),
             ("NUMGREATEREQ", OperationKind::NumericGreaterthaneq),
@@ -118,9 +116,6 @@ mod test {
 
     #[test]
     fn reject_names_that_merely_start_with_an_operation() {
-        // An operation name is only recognized when it makes up a whole
-        // identifier, so these are ordinary predicate names rather than a
-        // known operation followed by trailing characters.
         for input in ["SUMX", "STRX", "STRLENGTH", "sum_", "count2"] {
             let parser_input = ParserInput::new(input, ParserState::default());
 

@@ -44,14 +44,6 @@ impl<'a> Rule<'a> {
     }
 
     /// Continue parsing a rule whose first head guard has already been parsed.
-    ///
-    /// Hands the guard back, having consumed nothing further, when no rule
-    /// arrow follows: it is then a fact rather than a rule head.
-    ///
-    /// Both fact cases return `input`, discarding the head elements parsed
-    /// speculatively. Returning the position after them instead would swallow a
-    /// trailing separator, and `a(1),.` would parse as a fact followed by the
-    /// `.` its caller demands.
     pub(crate) fn parse_continued(
         first: Guard<'a>,
         input_span: Span<'a>,
