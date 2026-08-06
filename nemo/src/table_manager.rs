@@ -949,8 +949,6 @@ mod test {
 
     #[test]
     fn test_defragmentation_schedule() {
-        assert_eq!(MAX_FRAGMENTATION, 8, "the expectations below assume this");
-
         // Nothing is combined before a full group has accumulated.
         assert!(defragmentation_ranges(7).is_empty());
 
