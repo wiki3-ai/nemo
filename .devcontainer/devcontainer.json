@@ -30,8 +30,8 @@
       }
     }
   },
-  "postStartCommand": "nix develop --command bash -c 'echo \"Nix dev shell ready\"' || true",
-  "postCreateCommand": "nix develop --command bash .devcontainer/postCreateCommand.sh",
+  "postStartCommand": "nix --extra-experimental-features 'nix-command flakes' develop --command bash -c 'echo \"Nix dev shell ready\"' || true",
+  "postCreateCommand": "nix --extra-experimental-features 'nix-command flakes' develop --command bash .devcontainer/postCreateCommand.sh",
   "remoteUser": "vscode",
   "mounts": [
     "source=nemo-nix-store,target=/nix,type=volume",
