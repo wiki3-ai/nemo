@@ -33,7 +33,6 @@
       }
     }
   },
-  "onCreateCommand": "chown -R vscode:vscode /home/vscode/.cargo || true",
   "postStartCommand": "nix develop --command bash -c 'echo \"Nix dev shell ready\"' || true",
   "postCreateCommand": "nix develop --command bash .devcontainer/postCreateCommand.sh",
   "remoteUser": "vscode",
