@@ -17,18 +17,21 @@ REQ_FILE="${WORKSPACE_FOLDER:-/workspaces/nemo}/.devcontainer/requirements-dev.t
 echo "==> Creating Python virtualenv at ${VENV_DIR}"
 python3 -m venv "${VENV_DIR}"
 
-echo "==> Activating virtualenv"
-# shellcheck disable=SC1091
-source "${VENV_DIR}/bin/activate"
+VENV_PYTHON="${VENV_DIR}/bin/python"
+VENV_PIP="${VENV_DIR}/bin/pip"
 
 echo "==> Installing Jupyter tooling"
-pip install --upgrade pip
-pip install -r "${REQ_FILE}"
+"${VENV_PIP}" install --upgrade pip
+"${VENV_PIP}" install -r "${REQ_FILE}"
 
 echo "==> Building nmo_python bindings with maturin"
-maturin develop --manifest-path "${WORKSPACE_FOLDER:-/workspaces/nemo}/nemo-python/Cargo.toml"
+# maturin develop installs into the active Python; point it at the venv
+# explicitly so the bindings land in the venv, not the Nix Python.
+maturin develop \
+  --manifest-path "${WORKSPACE_FOLDER:-/workspaces/nemo}/nemo-python/Cargo.toml" \
+  --interpreter "${VENV_PYTHON}"
 
 echo "==> Verifying nmo_python import"
-python -c "import nmo_python; print('nmo_python OK:', nmo_python.__file__)"
+"${VENV_PYTHON}" -c "import nmo_python; print('nmo_python OK:', nmo_python.__file__)"
 
 echo "==> Devcontainer setup complete."

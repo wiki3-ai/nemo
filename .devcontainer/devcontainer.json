@@ -31,7 +31,7 @@
     }
   },
   "postStartCommand": "nix develop --command bash -c 'echo \"Nix dev shell ready\"' || true",
-  "postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
+  "postCreateCommand": "nix develop --command bash .devcontainer/postCreateCommand.sh",
   "remoteUser": "vscode",
   "mounts": [
     "source=nemo-nix-store,target=/nix,type=volume",
