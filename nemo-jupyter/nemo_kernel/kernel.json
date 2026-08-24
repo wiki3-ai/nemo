@@ -1,0 +1,7 @@
+{
+  "argv": ["python", "-m", "nemo_kernel", "-f", "{connection_file}"],
+  "display_name": "Nemo",
+  "language": "nemo",
+  "mimetype": "text/x-nemo",
+  "file_extension": ".rls"
+}
