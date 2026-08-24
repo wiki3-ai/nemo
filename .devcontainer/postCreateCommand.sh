@@ -36,4 +36,11 @@ maturin develop --manifest-path "${WORKSPACE_FOLDER:-/workspaces/nemo}/nemo-pyth
 echo "==> Verifying nmo_python import"
 python -c "import nmo_python; print('nmo_python OK:', nmo_python.__file__)"
 
+echo "==> Patching pyzmq so it finds libstdc++ outside nix develop"
+# The kernel and Jupyter run outside the nix dev shell, where LD_LIBRARY_PATH
+# has no libstdc++; embed a working path into the pyzmq shared libraries.
+if [ -x "${VENV_DIR}/../nemo-jupyter/fix-venv-libstdcxx.sh" ]; then
+    bash "${VENV_DIR}/../nemo-jupyter/fix-venv-libstdcxx.sh"
+fi
+
 echo "==> Devcontainer setup complete."

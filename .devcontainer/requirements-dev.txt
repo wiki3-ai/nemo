@@ -1,5 +1,4 @@
-# Jupyter tooling for development.
-# The future Nemo kernel will be built on top of these.
+# Jupyter tooling for development; used by the Nemo kernel (nemo-jupyter/).
 notebook
 jupyterlab
 ipykernel
