@@ -186,7 +186,7 @@ def run_program(source: str) -> ProgramResult:
 # Kernel                                                             #
 # ------------------------------------------------------------------ #
 
-_MAGICS = ("help", "load", "predicates", "program", "pwd", "reset", "standalone", "trace", "version")
+from .nemo_source import MAGIC_NAMES as _MAGICS
 
 _HELP = """\
 Nemo kernel — notebook cells accumulate into one Nemo program.
@@ -244,7 +244,6 @@ class NemoKernel(Kernel):
         "file_extension": ".rls",
         "pygments_lexer": "nemo",
         "codemirror_mode": "nemo",
-        "nbconvert_exporter": "not.convert.None",
     }
 
     def __init__(self, **kwargs):

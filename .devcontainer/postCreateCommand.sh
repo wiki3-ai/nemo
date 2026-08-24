@@ -36,6 +36,12 @@ maturin develop --manifest-path "${WORKSPACE_FOLDER:-/workspaces/nemo}/nemo-pyth
 echo "==> Verifying nmo_python import"
 python -c "import nmo_python; print('nmo_python OK:', nmo_python.__file__)"
 
+echo "==> Installing nemo-jupyter package (kernel + nbconvert exporter)"
+# Editable install so kernel.py/nbconvert.py changes are picked up live;
+# registers the 'nemo' nbconvert script exporter used by "Export as
+# Executable Script".
+"${VENV_PIP}" install -e "${WORKSPACE_FOLDER:-/workspaces/nemo}/nemo-jupyter"
+
 echo "==> Patching pyzmq so it finds libstdc++ outside nix develop"
 # The kernel and Jupyter run outside the nix dev shell, where LD_LIBRARY_PATH
 # has no libstdc++; embed a working path into the pyzmq shared libraries.

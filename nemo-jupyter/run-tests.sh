@@ -31,7 +31,7 @@ if ! "${VENV_PYTHON}" -c 'import zmq' >/dev/null 2>&1; then
 fi
 
 echo "==> unit tests"
-"${VENV_PYTHON}" -m pytest "${REPO_ROOT}/nemo-jupyter/tests/test_kernel_logic.py" -q
+"${VENV_PYTHON}" -m pytest "${REPO_ROOT}/nemo-jupyter/tests/" -q
 
 echo
 echo "==> end-to-end smoke test (starts a real kernel)"

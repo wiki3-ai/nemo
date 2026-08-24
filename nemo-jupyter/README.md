@@ -21,14 +21,20 @@ Prerequisites (already set up by the devcontainer):
 Register the kernel with Jupyter:
 
 ```bash
+.venv/bin/pip install -e nemo-jupyter   # once: registers the nbconvert exporter
 .venv/bin/python nemo-jupyter/install-kernel.py
 ```
 
-This writes a kernelspec to `~/.local/share/jupyter/kernels/nemo/` that
-launches the kernel with the repository's `.venv` Python. The kernel then
-appears as **Nemo** in the VS Code Jupyter extension and in JupyterLab.
-If it does not show up, reload the VS Code window (or restart the Jupyter
-server).
+The editable install makes the `nemo_jupyter` package importable and
+registers the **Nemo script exporter** with nbconvert (needed for
+"Export as Executable Script"). It also lets you launch the kernel with
+`python -m nemo_jupyter`. The devcontainer runs both steps automatically.
+
+`install-kernel.py` writes a kernelspec to
+`~/.local/share/jupyter/kernels/nemo/` that launches the kernel with the
+repository's `.venv` Python. The kernel then appears as **Nemo** in the
+VS Code Jupyter extension and in JupyterLab. If it does not show up,
+reload the VS Code window (or restart the Jupyter server).
 
 ## Usage
 
@@ -82,6 +88,29 @@ Example:
 
 ```
 !trace ancestor(ada, cyd)
+```
+
+### Export as Executable Script
+
+"Export as Executable Script" (JupyterLab / VS Code) produces a single
+`.rls` file — the accumulated program of all code cells — which you can
+run directly with the `nmo` CLI:
+
+```bash
+nmo hello-nemo.rls
+```
+
+Kernel magics are handled during export: `!trace`, `!program`, `!reset`,
+etc. are dropped; `!load <file>` is inlined; `!standalone` markers are
+dropped but the program below them is kept. Markdown cells are skipped.
+
+Notebooks created with early versions of the kernel carry stale
+`language_info.nbconvert_exporter` metadata that breaks this export
+(nbconvert treats it as an exporter name and fails with "Unknown
+exporter"). Fix existing notebooks with:
+
+```bash
+.venv/bin/python nemo-jupyter/fix-notebook-metadata.py my-notebook.ipynb
 ```
 
 ### Nix devcontainer: libstdc++
@@ -156,6 +185,7 @@ nemo-jupyter/
   run-kernel.py              Python launcher used by the kernelspec
   run-kernel.sh              shell wrapper (finds libstdc++ for pyzmq)
   install-kernel.py          registers the kernelspec with Jupyter
+  fix-notebook-metadata.py   removes stale nbconvert_exporter metadata
   run-tests.sh               runs unit + smoke tests
   fix-venv-libstdcxx.sh      patches pyzmq for the Nix libstdc++ quirk
   tests/                     unit + end-to-end tests
