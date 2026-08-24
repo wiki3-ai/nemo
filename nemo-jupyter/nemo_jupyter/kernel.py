@@ -1,12 +1,15 @@
 
 """Jupyter kernel for the Nemo rule engine.
 
-Each notebook cell is a complete Nemo program (facts, rules, directives).
-On execution the program is reasoned over and the contents of all
+Notebook cells accumulate into one Nemo program, like a normal notebook:
+facts and rules from earlier cells are visible to later cells. On every
+execution the accumulated program is reasoned over and the contents of all
 ``@export``-ed predicates are streamed back to the notebook.
 
 The kernel builds on the experimental Python bindings in ``nemo-python``
-(the ``nmo_python`` module), so its semantics follow those bindings.
+(the ``nmo_python`` module), so its semantics follow those bindings. There
+is no incremental engine API, so each cell re-runs the whole accumulated
+program (``!reset`` clears it, ``!standalone`` runs one cell in isolation).
 """
 
 from __future__ import annotations
@@ -136,6 +139,7 @@ class ProgramResult:
     predicates: list = field(default_factory=list)
     counts: dict = field(default_factory=dict)
     source: str = ""
+    cell_count: int = 1
     timing: object = None
     program: object = None
     engine: object = None
@@ -182,32 +186,40 @@ def run_program(source: str) -> ProgramResult:
 # Kernel                                                             #
 # ------------------------------------------------------------------ #
 
-_MAGICS = ("help", "load", "predicates", "pwd", "trace", "version")
+_MAGICS = ("help", "load", "predicates", "program", "pwd", "reset", "standalone", "trace", "version")
 
 _HELP = """\
-Nemo kernel — each cell is a complete Nemo program.
+Nemo kernel — notebook cells accumulate into one Nemo program.
 
-Write facts, rules and directives as in a .rls file, e.g.
+Write facts, rules and directives as in a .rls file. Earlier cells stay
+active: a rule in cell 2 sees facts from cell 1. Every run re-reasons the
+whole accumulated program and prints the contents of every @export-ed
+predicate, e.g.
 
     parent(ada, bob) .
     ancestor(?x, ?y) :- parent(?x, ?y) .
     ancestor(?x, ?y) :- parent(?x, ?z), ancestor(?z, ?y) .
     @export ancestor :- csv {}.
 
-Running the cell reasons over the program and prints the contents of
-every @export-ed predicate.
-
 Kernel commands (magics) start with '!' (Nemo uses '%' for comments):
 
-    !help         this help
-    !version      versions of kernel, bindings and rule engine
-    !pwd          print the kernel's working directory
-    !load <file>  print the contents of a Nemo (.rls) file
-    !predicates   list exported and imported predicates of the last program
-    !trace <fact> show the derivation of a fact, e.g. !trace ancestor(ada, bob)
+    !help             this help
+    !version          versions of kernel, bindings and rule engine
+    !pwd              print the kernel's working directory
+    !load <file>      print the contents of a Nemo (.rls) file
+    !program          show the accumulated program (all cells so far)
+    !reset            clear the accumulated program (start fresh)
+    !standalone       run a cell in isolation (first line, program follows)
+    !predicates       list exported and imported predicates of the last run
+    !trace <fact>     show the derivation of a fact, e.g. !trace ancestor(ada, bob)
 
 Notes
-  * Each cell is standalone: earlier cells do not add facts to later ones.
+  * Only successful cells are accumulated; a failed cell changes nothing.
+  * Re-running an identical cell is ignored (facts/rules are idempotent).
+  * Editing an earlier cell does not retract its old content: restart the
+    kernel and re-run all cells to rebuild a consistent program.
+  * Redefining a @prefix/@base in a later cell is an error (as when
+    concatenating .rls files).
   * @import directives resolve relative to the kernel's working directory
     (run !pwd to see it).
 """
@@ -237,6 +249,7 @@ class NemoKernel(Kernel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._accumulated: list[str] = []
         self._last: ProgramResult | None = None
 
     # -- execute ---------------------------------------------------- #
@@ -247,6 +260,17 @@ class NemoKernel(Kernel):
         text = (code or "").strip()
         if not text:
             return self._reply("ok")
+
+        # "!standalone" on the first line runs this cell as an isolated
+        # program (it neither sees nor changes the accumulated program).
+        first_line, sep, rest = text.partition("\n")
+        if first_line.strip() == "!standalone":
+            program = rest.strip()
+            if not program:
+                if not silent:
+                    self._send_error("MagicError", "usage: !standalone followed by a Nemo program on the next lines")
+                return self._reply("error", "MagicError", "usage: !standalone followed by a Nemo program on the next lines")
+            return self._execute_program(program, accumulate=False, silent=silent)
 
         magic = self._match_magic(text)
         if magic is not None:
@@ -261,8 +285,30 @@ class NemoKernel(Kernel):
                 self._stream(output)
             return self._reply("ok")
 
-        result = run_program(text)
+        return self._execute_program(text, accumulate=True, silent=silent)
+
+    def _execute_program(self, source: str, accumulate: bool, silent: bool):
+        """Run a Nemo program, optionally accumulating it into the session.
+
+        Accumulation concatenates the sources of all successful cells and
+        re-reasons the whole program (the bindings have no incremental API).
+        Identical re-runs are skipped, and failed cells are not accumulated.
+        """
+        if accumulate:
+            parts = list(self._accumulated)
+            if source not in parts:
+                parts.append(source)
+            full = "\n\n".join(parts)
+        else:
+            full = source
+
+        result = run_program(full)
         if result.ok:
+            if accumulate and source not in self._accumulated:
+                self._accumulated.append(source)
+                result.cell_count = len(self._accumulated)
+            elif not accumulate:
+                result.cell_count = 0
             self._last = result
             if not silent:
                 self._stream(self._format_result(result))
@@ -303,6 +349,17 @@ class NemoKernel(Kernel):
             exported = ", ".join(self._last.predicates) or "(none)"
             imported = ", ".join(parse_import_predicates(self._last.source)) or "(none)"
             return f"exported: {exported}\nimported: {imported}"
+        if name == "program":
+            if not self._accumulated:
+                return "no cells accumulated yet"
+            header = f"# accumulated program ({len(self._accumulated)} cells)"
+            return header + "\n\n" + "\n\n".join(self._accumulated)
+        if name == "reset":
+            self._accumulated = []
+            self._last = None
+            return "accumulated program cleared (0 cells)"
+        if name == "standalone":
+            raise ValueError("put !standalone on the first line of a cell, followed by the program")
         if name == "trace":
             if not arg:
                 raise ValueError("usage: !trace <fact>, e.g. !trace ancestor(ada, bob)")
@@ -330,6 +387,8 @@ class NemoKernel(Kernel):
                 summary_parts.append(f"reasoning: {ms:.1f} ms")
             except Exception:
                 pass
+        if result.cell_count >= 2:
+            summary_parts.append(f"cells: {result.cell_count}")
         if summary_parts:
             lines.append("[" + ", ".join(summary_parts) + "]")
         return "\n".join(lines)

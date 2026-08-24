@@ -102,7 +102,31 @@ def main() -> int:
         assert error_msgs, "expected an error message for invalid program"
         print(f"[ok] invalid program reported error: {error_msgs[0]['content']['evalue'][:60]!r}...")
 
-        # 4. check kernel info (skip any stale replies in the shell channel)
+        # 5. cells accumulate into one program
+        text = stream_text(execute(client, "extra(7, 8) ."))
+        assert "cells: 2" in text, text             # second program cell was accumulated
+        text = stream_text(execute(client, "extra2(?x, ?y) :- extra(?x, ?y) .\n@export extra2 :- csv {}."))
+        assert "extra2(7, 8)" in text, text          # sees facts from the earlier cell
+        assert "cells: 3" in text, text              # program cell + ancestors + this one
+        print("[ok] cells accumulate (later cell sees earlier facts)")
+
+        # 6. !reset clears the accumulated program
+        text = stream_text(execute(client, "!reset"))
+        assert "cleared" in text, text
+        text = stream_text(execute(client, "solo(1, 1) .\n@export solo :- csv {}."))
+        assert "solo(1, 1)" in text, text
+        assert "extra2" not in text, text
+        print("[ok] !reset clears the accumulated program")
+
+        # 7. !standalone runs a cell in isolation
+        text = stream_text(execute(client, "!standalone\niso(9, 9) .\n@export iso :- csv {}."))
+        assert "iso(9, 9)" in text, text
+        text = stream_text(execute(client, "!program"))
+        assert "solo(1, 1)" in text and "iso(9, 9)" not in text, text
+        print("[ok] !standalone runs a cell in isolation")
+
+        # 8. check kernel info (done last: it leaves stale busy/idle status
+        # messages on the iopub channel that would confuse message readers)
         client.kernel_info()
         info = None
         while True:

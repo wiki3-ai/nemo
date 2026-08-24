@@ -2,8 +2,9 @@
 
 A [Jupyter](https://jupyter.org/) kernel that lets you write and run
 [Nemo](https://github.com/knowsys/nemo) rule programs directly in
-notebooks. Each cell is a complete Nemo program (facts, rules,
-directives); running the cell reasons over the program and prints the
+notebooks. Cells work like a normal notebook: they **accumulate into one
+program**, so facts and rules from earlier cells stay active in later
+cells. Every run re-reasons the accumulated program and prints the
 contents of every `@export`-ed predicate.
 
 The kernel is built on `ipykernel` and the Python bindings in
@@ -31,30 +32,34 @@ server).
 
 ## Usage
 
-Create a notebook and select the **Nemo** kernel. Write a program in a
-cell, for example:
+Create a notebook and select the **Nemo** kernel. Cells accumulate into
+one program — for example, this cell adds facts:
 
 ```nemo
 parent(ada, bob) .
 parent(bob, cyd) .
+```
 
+and a later cell adds rules that see those facts:
+
+```nemo
 ancestor(?x, ?y) :- parent(?x, ?y) .
 ancestor(?x, ?y) :- parent(?x, ?z), ancestor(?z, ?y) .
 
 @export ancestor :- csv {}.
 ```
 
-Running the cell prints the derived facts:
+Running the second cell prints the derived facts:
 
 ```
 ancestor(<ada>, <bob>)
 ancestor(<bob>, <cyd>)
 ancestor(<ada>, <cyd>)
-[ancestor: 3, total: 3, reasoning: 1.1 ms]
+[ancestor: 3, total: 3, reasoning: 1.1 ms, cells: 2]
 ```
 
 (Bare names like `ada` are relative IRIs, so they print in canonical
-`<...>` form.)
+`<...>` form. The summary shows the number of accumulated cells.)
 
 ### Kernel commands
 
@@ -67,6 +72,9 @@ available for magics):
 | `!version`              | Show kernel, bindings and engine versions           |
 | `!pwd`                  | Print the kernel's working directory                |
 | `!load <file>`          | Print the contents of a Nemo (`.rls`) file          |
+| `!program`              | Show the accumulated program (all cells so far)     |
+| `!reset`                | Clear the accumulated program                       |
+| `!standalone`           | Run one cell in isolation (first line, program follows) |
 | `!predicates`           | List exported/imported predicates of the last run   |
 | `!trace <fact>`         | Show the derivation of a fact of the last run       |
 
@@ -95,8 +103,20 @@ as a fallback.
 
 ### Notes and limitations
 
-* **Each cell is standalone.** Facts and rules do not accumulate across
-  cells; run the whole program in one cell (or concatenate sources).
+* **Cells accumulate into one program.** Each run re-reasons the whole
+  accumulated program (the bindings have no incremental API), so a long
+  notebook with large imports re-imports everything on every run. Use
+  `!standalone` for isolated experiments and `!reset` to drop large
+  imports when you are done with them.
+* **Only successful cells accumulate.** A cell that fails to parse leaves
+  the program unchanged. Re-running an identical cell is ignored (facts
+  and rules are idempotent).
+* **Editing an earlier cell does not retract its old content.** The kernel
+  has no cell identity, so a changed cell is added on top of the previous
+  version. Restart the kernel and re-run all cells to rebuild a
+  consistent program.
+* **Redefining a `@prefix` or `@base` in a later cell is an error** — the
+  same as concatenating two `.rls` files that redeclare a prefix.
 * **Results come from `@export` directives**, exactly like the `nmo` CLI.
   Without `@export`, a cell runs but shows no results.
 * `@import` and `@export` file resources resolve relative to the kernel's
