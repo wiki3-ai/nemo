@@ -6416,11 +6416,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787672233,
-        "narHash": "sha256-F7/PZnIJUz+PuqtJGbuq/gelcld0hp7FdOHVRuR9jEU=",
+        "lastModified": 1787645404,
+        "narHash": "sha256-dP1OEzckMr9X4/tbHqymamTFJbohKvLIvCVc/Q7mDhc=",
         "owner": "wiki3-ai",
         "repo": "nemo-web",
-        "rev": "b497a4a55ddea1b1a2849c11a688105e231667b1",
+        "rev": "062b387d78082d5aef4ed6152212f338010f590f",
         "type": "github"
       },
       "original": {
