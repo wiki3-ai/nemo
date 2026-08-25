@@ -61,5 +61,5 @@ jobs:
         run: |
           nix build .\#docker
           docker load < result
-          docker image tag nemo:latest ${{ env.REGISTRY }}/knowsys/nemo:latest
-          docker push ${{ env.REGISTRY }}/knowsys/nemo:latest
+          docker image tag nemo:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/nemo:latest
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/nemo:latest
