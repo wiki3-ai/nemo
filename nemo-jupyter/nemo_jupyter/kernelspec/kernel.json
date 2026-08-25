@@ -1,0 +1,9 @@
+{
+  "argv": ["python", "-m", "nemo_jupyter", "-f", "{connection_file}"],
+  "display_name": "Nemo",
+  "language": "nemo",
+  "interrupt_mode": "message",
+  "metadata": {
+    "debugger": false
+  }
+}

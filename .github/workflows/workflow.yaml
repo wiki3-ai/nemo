@@ -1,0 +1,102 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------
+  # Build nmo-python wheels (Rust extension) for each platform
+  # ---------------------------------------------------------------
+  build-nmo-python:
+    name: Build nmo-python (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 (manylinux)
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          # Linux aarch64 (manylinux via QEMU)
+          - os: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+          # macOS x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheels with maturin
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: --release --locked --manifest-path nemo-python/Cargo.toml --out dist
+          manylinux: auto
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmo-python-${{ matrix.target }}
+          path: dist/*.whl
+
+  # ---------------------------------------------------------------
+  # Publish nmo-python wheels to PyPI
+  # ---------------------------------------------------------------
+  publish-nmo-python:
+    name: Publish nmo-python to PyPI
+    needs: build-nmo-python
+    runs-on: ubuntu-22.04
+    environment: pypi
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nmo-python-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  # ---------------------------------------------------------------
+  # Build and publish nemo-jupyter (pure Python) to PyPI
+  # ---------------------------------------------------------------
+  publish-nemo-jupyter:
+    name: Publish nemo-jupyter to PyPI
+    needs: publish-nmo-python
+    runs-on: ubuntu-22.04
+    environment: pypi
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build nemo-jupyter/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: nemo-jupyter/dist/
