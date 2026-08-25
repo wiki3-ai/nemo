@@ -28,19 +28,26 @@ jobs:
         with:
           swap-storage: false
           tool-cache: true
-      - run: nix build .\#nemo
-      - run: nix build .\#nemo-language-server
-      - run: nix build .\#nemo-python
-      - run: nix build .\#nemo-wasm-bundler
-      - run: nix build .\#nemo-wasm-node
-      - run: nix build .\#nemo-wasm-web
-      - run: nix build .\#nemo-vscode-extension
-      - run: nix build .\#nemo-web
-      - run: nix build .\#nemo-doc
-      - run: nix flake check
+      - name: Set flake lockfile policy
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "NIX_FLAKE_FLAGS=--no-update-lock-file" >> "$GITHUB_ENV"
+          else
+            echo "NIX_FLAKE_FLAGS=" >> "$GITHUB_ENV"
+          fi
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo-language-server
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo-python
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo-wasm-bundler
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo-wasm-node
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo-wasm-web
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo-vscode-extension
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo-web
+      - run: nix build $NIX_FLAKE_FLAGS .\#nemo-doc
+      - run: nix flake check $NIX_FLAKE_FLAGS
       - name: Build and Collect garbage
         run: |
-          nix build .\#{nemo{,-doc,-language-server,-python,-vscode-extension,-wasm-bundler,-wasm-node,-wasm-web,-web},docker}
+          nix build $NIX_FLAKE_FLAGS .\#{nemo{,-doc,-language-server,-python,-vscode-extension,-wasm-bundler,-wasm-node,-wasm-web,-web},docker}
           nix-store --optimise
           nix-collect-garbage -d
 
@@ -53,7 +60,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build docker image
         run: |
-          nix build .\#docker
+          nix build $NIX_FLAKE_FLAGS .\#docker
           docker load < result
           docker image tag nemo:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/nemo:latest
       - name: Push docker image
