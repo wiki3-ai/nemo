@@ -6416,15 +6416,15 @@
         ]
       },
       "locked": {
-        "lastModified": 1748322819,
-        "narHash": "sha256-I4nxJdnRPLuJ63ggJEAhUEnrYw2NSlwGPu4lRVdPSc4=",
-        "owner": "knowsys",
+        "lastModified": 1787645404,
+        "narHash": "sha256-dP1OEzckMr9X4/tbHqymamTFJbohKvLIvCVc/Q7mDhc=",
+        "owner": "wiki3-ai",
         "repo": "nemo-web",
-        "rev": "7b0cfba94362dc61c3671d3cf3eefe37b7e5ac17",
+        "rev": "062b387d78082d5aef4ed6152212f338010f590f",
         "type": "github"
       },
       "original": {
-        "owner": "knowsys",
+        "owner": "wiki3-ai",
         "repo": "nemo-web",
         "type": "github"
       }

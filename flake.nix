@@ -25,7 +25,7 @@
     };
 
     nemo-web = {
-      url = "github:knowsys/nemo-web";
+      url = "github:wiki3-ai/nemo-web";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         dream2nix.follows = "dream2nix";
@@ -437,16 +437,6 @@
                     deps = {
                       inherit (self.packages.${system}) nemo-wasm-web nemo-wasm-bundler nemo-vscode-extension-vsix;
                     };
-                  }
-                  {
-                    # dream2nix flattens node_modules, so commander@2.20.3 (a top-level
-                    # transitive dep) takes precedence over the commander@14 that
-                    # generate-license-file@4.2.1 requires via @commander-js/extra-typings.
-                    # commander@2.x lacks .helpOption(), causing the build to fail on
-                    # Node.js v24. Skip the generateLicenseFile step to work around this.
-                    mkDerivation.preBuild = ''
-                      sed -i 's/vite build && npm run generateLicenseFile/vite build/' package.json
-                    '';
                   }
                 ];
               }).config.public;
