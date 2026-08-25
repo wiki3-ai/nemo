@@ -37,7 +37,7 @@ jobs:
     runs-on: ${{ matrix.platform.runs-on }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
       - name: Build release binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
@@ -91,7 +91,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
