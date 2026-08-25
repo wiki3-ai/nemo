@@ -72,31 +72,3 @@ jobs:
         with:
           packages-dir: dist/
 
-  # ---------------------------------------------------------------
-  # Build and publish nemo-jupyter (pure Python) to PyPI
-  # ---------------------------------------------------------------
-  publish-nemo-jupyter:
-    name: Publish nemo-jupyter to PyPI
-    needs: publish-nmo-python
-    runs-on: ubuntu-22.04
-    environment: pypi
-    permissions:
-      id-token: write  # required for OIDC trusted publishing
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install build
-        run: pip install build
-
-      - name: Build sdist and wheel
-        run: python -m build nemo-jupyter/
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: nemo-jupyter/dist/

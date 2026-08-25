@@ -22,10 +22,10 @@ jobs:
         include:
           - { rust: nightly, os: ubuntu-latest }
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          rust-version: ${{ matrix.rust }}
+          toolchain: ${{ matrix.rust }}
       - run: cargo test --verbose
 
   clippy:
@@ -34,22 +34,22 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy
-          rust-version: nightly
+          toolchain: nightly
       - run: cargo clippy --all-targets --workspace --verbose
 
   rustfmt:
     name: Verify code formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
           components: rustfmt
-          rust-version: nightly
+          toolchain: nightly
       - run: cargo fmt --all -- --check
 
   doc:
@@ -59,21 +59,21 @@ jobs:
       RUSTFLAGS: -Dwarnings
       RUSTDOCFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          rust-version: nightly
+          toolchain: nightly
       - run: cargo doc --workspace
 
   miri:
     name: Check for undefined behaviour with miri
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
           components: miri
-          rust-version: nightly
+          toolchain: nightly
       - run: cargo miri setup
       - run: cargo miri test -- -Z unstable-options --report-time
 
@@ -81,8 +81,8 @@ jobs:
     name: Test python bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - name: build python bindings
@@ -98,8 +98,8 @@ jobs:
     name: Check python code formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - name: install pycodestyle
@@ -111,7 +111,7 @@ jobs:
     name: Test wasm bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Install
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
