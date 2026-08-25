@@ -437,6 +437,12 @@
                     deps = {
                       inherit (self.packages.${system}) nemo-wasm-web nemo-wasm-bundler nemo-vscode-extension-vsix;
                     };
+                    # generate-license-file@4.2.1 crashes when it resolves commander 2.x
+                    # instead of commander 14.x (due to how dream2nix resolves nested deps).
+                    # Patch the npm script to write an empty license file instead.
+                    mkDerivation.postPatch = ''
+                      sed -i 's|"generate-license-file --ci --input package.json --output dist/3rd-party-licenses.txt"|"mkdir -p dist \&\& : > dist/3rd-party-licenses.txt"|' package.json
+                    '';
                   }
                 ];
               }).config.public;

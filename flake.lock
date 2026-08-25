@@ -5928,11 +5928,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785549013,
-        "narHash": "sha256-1lfSuSHot5ts3OJDkXjW4IRmuzyX1bxnqHlzFzVROYM=",
+        "lastModified": 1785549212,
+        "narHash": "sha256-z8fBlvKxKz5yiuSg7bOz0/nUQTfEV/Nf1+UE7pUnuvM=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "9fb5409695ff6b4e45d416e6e608c799deed5fe3",
+        "rev": "77e6e77b6e1a9d7a9a2a5a7b4f7170a4978f0bfe",
         "type": "github"
       },
       "original": {
@@ -7017,15 +7017,15 @@
         ]
       },
       "locked": {
-        "lastModified": 1785549173,
-        "narHash": "sha256-zxBGFhQYRk0c+Myc/pb6HWI4aGSde0T4netLOJzFx8k=",
-        "owner": "knowsys",
+        "lastModified": 1787672233,
+        "narHash": "sha256-F7/PZnIJUz+PuqtJGbuq/gelcld0hp7FdOHVRuR9jEU=",
+        "owner": "wiki3-ai",
         "repo": "nemo-web",
-        "rev": "3a66e5da179e5ddaecea56d21d9502eb360bfa35",
+        "rev": "b497a4a55ddea1b1a2849c11a688105e231667b1",
         "type": "github"
       },
       "original": {
-        "owner": "knowsys",
+        "owner": "wiki3-ai",
         "repo": "nemo-web",
         "type": "github"
       }
