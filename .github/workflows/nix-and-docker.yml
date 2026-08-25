@@ -28,21 +28,19 @@ jobs:
         with:
           swap-storage: false
           tool-cache: true
-      - name: Update nemo-web flake input
-        run: nix flake update nemo-web
-      - run: nix build .\#nemo
-      - run: nix build .\#nemo-language-server
-      - run: nix build .\#nemo-python
-      - run: nix build .\#nemo-wasm-bundler
-      - run: nix build .\#nemo-wasm-node
-      - run: nix build .\#nemo-wasm-web
-      - run: nix build .\#nemo-vscode-extension
-      - run: nix build .\#nemo-web
-      - run: nix build .\#nemo-doc
-      - run: nix flake check
+      - run: nix build --no-update-lock-file .\#nemo
+      - run: nix build --no-update-lock-file .\#nemo-language-server
+      - run: nix build --no-update-lock-file .\#nemo-python
+      - run: nix build --no-update-lock-file .\#nemo-wasm-bundler
+      - run: nix build --no-update-lock-file .\#nemo-wasm-node
+      - run: nix build --no-update-lock-file .\#nemo-wasm-web
+      - run: nix build --no-update-lock-file .\#nemo-vscode-extension
+      - run: nix build --no-update-lock-file .\#nemo-web
+      - run: nix build --no-update-lock-file .\#nemo-doc
+      - run: nix flake check --no-update-lock-file
       - name: Build and Collect garbage
         run: |
-          nix build .\#{nemo{,-doc,-language-server,-python,-vscode-extension,-wasm-bundler,-wasm-node,-wasm-web,-web},docker}
+          nix build --no-update-lock-file .\#{nemo{,-doc,-language-server,-python,-vscode-extension,-wasm-bundler,-wasm-node,-wasm-web,-web},docker}
           nix-store --optimise
           nix-collect-garbage -d
 
@@ -55,7 +53,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build docker image
         run: |
-          nix build .\#docker
+          nix build --no-update-lock-file .\#docker
           docker load < result
           docker image tag nemo:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/nemo:latest
       - name: Push docker image
