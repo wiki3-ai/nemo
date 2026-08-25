@@ -440,14 +440,30 @@
                   }
                   {
                     # dream2nix flattens node_modules, so commander@2.20.3 (a top-level
-                    # transitive dep) takes precedence over the commander@14 that
-                    # generate-license-file@4.2.1 requires via @commander-js/extra-typings.
+                    # transitive dep from terser) takes precedence over the commander@14
+                    # required by generate-license-file@4.2.1 via @commander-js/extra-typings.
                     # commander@2.x lacks .helpOption(), causing the build to fail on
-                    # Node.js v24. Strip the generateLicenseFile invocation from the
-                    # buildNoTsc script regardless of what other steps precede it.
-                    mkDerivation.preBuild = ''
-                      sed -i 's/ *&& npm run generateLicenseFile//' package.json
-                    '';
+                    # Node.js v24. Replace the flattened commander with v14 before the
+                    # build runs so that generateLicenseFile works correctly.
+                    # This can be dropped once nemo-web pins commander@14 in its
+                    # package-lock.json (e.g. via an npm "overrides" field).
+                    mkDerivation.preBuild =
+                      let
+                        commander14 = pkgs.runCommandLocal "commander-14.0.3" {
+                          src = pkgs.fetchurl {
+                            url = "https://registry.npmjs.org/commander/-/commander-14.0.3.tgz";
+                            hash = "sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==";
+                          };
+                          nativeBuildInputs = [ pkgs.gnutar ];
+                        } ''
+                          mkdir -p $out
+                          tar xzf $src -C $out --strip-components=1
+                        '';
+                      in ''
+                        rm -rf node_modules/commander
+                        cp -r ${commander14} node_modules/commander
+                        chmod -R +w node_modules/commander
+                      '';
                   }
                 ];
               }).config.public;
