@@ -40,7 +40,7 @@ jobs:
         with:
           command: build
           target: ${{ matrix.target }}
-          args: --release --locked --manifest-path nemo-python/Cargo.toml --out dist
+          args: --release --locked --manifest-path nemo-python/Cargo.toml --out dist --find-interpreter
           manylinux: auto
 
       - name: Upload wheel artifacts
