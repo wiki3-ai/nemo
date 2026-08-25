@@ -443,9 +443,10 @@
                     # transitive dep) takes precedence over the commander@14 that
                     # generate-license-file@4.2.1 requires via @commander-js/extra-typings.
                     # commander@2.x lacks .helpOption(), causing the build to fail on
-                    # Node.js v24. Skip the generateLicenseFile step to work around this.
+                    # Node.js v24. Strip the generateLicenseFile invocation from the
+                    # buildNoTsc script regardless of what other steps precede it.
                     mkDerivation.preBuild = ''
-                      sed -i 's/vite build && npm run generateLicenseFile/vite build/' package.json
+                      sed -i 's/ *&& npm run generateLicenseFile//' package.json
                     '';
                   }
                 ];
