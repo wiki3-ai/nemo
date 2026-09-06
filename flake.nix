@@ -109,7 +109,10 @@
 
             nativeBuildInputs = lib.attrValues {
               inherit python3;
-              inherit (pkgs) pkg-config;
+              inherit (pkgs)
+                perl
+                pkg-config
+                ;
             };
 
             env = {
