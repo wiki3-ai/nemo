@@ -3,7 +3,7 @@ requires = ["maturin>=1,<2"]
 build-backend = "maturin"
 
 [project]
-name = "nmo-python"
+name = "nemo-python"
 dynamic = ["version"]
 requires-python = ">=3.7"
 classifiers = [
