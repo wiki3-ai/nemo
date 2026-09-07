@@ -14,6 +14,9 @@ set -euo pipefail
 VENV_DIR="${WORKSPACE_FOLDER:-/workspaces/nemo}/.venv"
 REQ_FILE="${WORKSPACE_FOLDER:-/workspaces/nemo}/.devcontainer/requirements-dev.txt"
 
+echo "==> Enabling repository Git hooks"
+git -C "${WORKSPACE_FOLDER:-/workspaces/nemo}" config core.hooksPath "${WORKSPACE_FOLDER:-/workspaces/nemo}/.githooks"
+
 echo "==> Creating Python virtualenv at ${VENV_DIR}"
 python3 -m venv "${VENV_DIR}"
 

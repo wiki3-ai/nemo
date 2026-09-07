@@ -16,6 +16,16 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  lockfile:
+    name: Verify Cargo.lock is in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+      - run: cargo metadata --format-version 1 --locked > /dev/null
+
   test:
     name: Test Rust ${{ matrix.rust }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
