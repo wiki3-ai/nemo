@@ -1,0 +1,87 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------
+  # Build nmo-python wheels (Rust extension) for each platform
+  # ---------------------------------------------------------------
+  build-nmo-python:
+    name: Build nmo-python (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 (manylinux)
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            manylinux: 2014
+            container: ghcr.io/rust-cross/manylinux2014-cross:x86_64
+          # Linux aarch64 (manylinux via QEMU)
+          - os: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+            manylinux: 2014
+            container: ghcr.io/rust-cross/manylinux2014-cross:aarch64
+          # macOS x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Linux wheels with maturin
+        if: runner.os == 'Linux'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: --release --locked --compatibility pypi --manifest-path nemo-python/Cargo.toml --out dist --find-interpreter
+          manylinux: ${{ matrix.manylinux }}
+          container: ${{ matrix.container }}
+
+      - name: Build macOS and Windows wheels with maturin
+        if: runner.os != 'Linux'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: --release --locked --manifest-path nemo-python/Cargo.toml --out dist --find-interpreter
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmo-python-${{ matrix.target }}
+          path: dist/*.whl
+
+  # ---------------------------------------------------------------
+  # Publish nmo-python wheels to PyPI
+  # ---------------------------------------------------------------
+  publish-nmo-python:
+    name: Publish nmo-python to PyPI
+    needs: build-nmo-python
+    runs-on: ubuntu-22.04
+    environment: pypi
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nmo-python-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

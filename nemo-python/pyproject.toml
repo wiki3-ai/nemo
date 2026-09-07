@@ -3,7 +3,9 @@ requires = ["maturin>=1,<2"]
 build-backend = "maturin"
 
 [project]
-name = "nmo-python"
+name = "nemo-python"
+description = "Python bindings for nemo, a fast in-memory rule engine"
+readme = "README.md"
 dynamic = ["version"]
 requires-python = ">=3.7"
 classifiers = [

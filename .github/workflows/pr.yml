@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -22,10 +25,10 @@ jobs:
         include:
           - { rust: nightly, os: ubuntu-latest }
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          rust-version: ${{ matrix.rust }}
+          toolchain: ${{ matrix.rust }}
       - run: cargo test --verbose
 
   clippy:
@@ -34,22 +37,22 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
           components: clippy
-          rust-version: nightly
+          toolchain: nightly
       - run: cargo clippy --all-targets --workspace --verbose
 
   rustfmt:
     name: Verify code formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
           components: rustfmt
-          rust-version: nightly
+          toolchain: nightly
       - run: cargo fmt --all -- --check
 
   doc:
@@ -59,21 +62,21 @@ jobs:
       RUSTFLAGS: -Dwarnings
       RUSTDOCFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          rust-version: nightly
+          toolchain: nightly
       - run: cargo doc --workspace
 
   miri:
     name: Check for undefined behaviour with miri
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: hecrj/setup-rust-action@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
           components: miri
-          rust-version: nightly
+          toolchain: nightly
       - run: cargo miri setup
       - run: cargo miri test -- -Z unstable-options --report-time
 
@@ -81,8 +84,8 @@ jobs:
     name: Test python bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - name: build python bindings
@@ -98,8 +101,8 @@ jobs:
     name: Check python code formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - name: install pycodestyle
@@ -111,10 +114,43 @@ jobs:
     name: Test wasm bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Install
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - run: wasm-pack test --headless --chrome nemo-wasm
       - run: wasm-pack test --headless --firefox nemo-wasm
+
+  nix-and-docker:
+    name: Verify nix flake and docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            auto-optimise-store = false
+      - uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          swap-storage: false
+          tool-cache: true
+      - run: nix build .\#nemo
+      - run: nix build .\#nemo-language-server
+      - run: nix build .\#nemo-python
+      - run: nix build .\#nemo-wasm-bundler
+      - run: nix build .\#nemo-wasm-node
+      - run: nix build .\#nemo-wasm-web
+      - run: nix build .\#nemo-vscode-extension
+      - run: nix build .\#nemo-web
+      - run: nix build .\#nemo-doc
+      - run: nix flake check
+      - name: Build and collect garbage
+        run: |
+          nix build .\#{nemo{,-doc,-language-server,-python,-vscode-extension,-wasm-bundler,-wasm-node,-wasm-web,-web},docker}
+          nix-store --optimise
+          nix-collect-garbage -d
+      - name: Build docker image
+        run: |
+          nix build .\#docker
+          docker load < result

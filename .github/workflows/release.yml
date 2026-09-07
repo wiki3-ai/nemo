@@ -37,7 +37,7 @@ jobs:
     runs-on: ${{ matrix.platform.runs-on }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
       - name: Build release binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
@@ -91,7 +91,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
@@ -121,5 +121,5 @@ jobs:
         run: |
           nix build .\#docker
           docker load < result
-          docker image tag nemo:latest ${{ env.REGISTRY }}/knowsys/nemo:${{ github.ref_name }}
-          docker push ${{ env.REGISTRY }}/knowsys/nemo:${{ github.ref_name }}
+          docker image tag nemo:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/nemo:${{ github.ref_name }}
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/nemo:${{ github.ref_name }}
