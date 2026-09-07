@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+should_check_main=false
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$remote_ref" = "refs/heads/main" ]; then
+        should_check_main=true
+        break
+    fi
+done
+
+if [ "$should_check_main" != "true" ]; then
+    exit 0
+fi
+
+echo "Running main-branch push checks..."
+cargo metadata --format-version 1 --locked > /dev/null
+cargo build --verbose
+cargo test --verbose

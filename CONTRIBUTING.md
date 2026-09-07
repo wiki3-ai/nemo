@@ -44,6 +44,14 @@ Before creating the pull request be sure to check if
 - [ ] clippy does not complain about your code (run `cargo clippy`), and
 - [ ] the code has been formatted with `rustfmt` (run `cargo fmt`).
 
+To guard pushes to `main`, this repository also includes a Git pre-push hook in `/home/runner/work/nemo/nemo/.githooks/pre-push`. Enable it once per clone with:
+
+```bash
+/home/runner/work/nemo/nemo/.githooks/install
+```
+
+When enabled, pushes that update `main` will run `cargo metadata --format-version 1 --locked`, `cargo build --verbose`, and `cargo test --verbose` before Git sends the ref update.
+
 To create a work in progress request, please open the pull request as a draft. (Not applicable in private repository, therefore label the PR as being a `PR-draft`)
 
 ### Commit messages
